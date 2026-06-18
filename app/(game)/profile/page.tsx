@@ -1,0 +1,2546 @@
+"use client";
+
+import React, { useEffect, useState } from "react";
+import Link from "next/link";
+import {
+  Coins,
+  Shield,
+  Sparkles,
+  RefreshCw,
+  Milestone,
+  TrendingUp,
+  Calendar,
+  Heart,
+  Award,
+  Edit2,
+  Save,
+  X,
+  User,
+  Image as ImageIcon,
+  MapPin,
+  Copy,
+  ChevronRight,
+  Flame,
+  Check,
+  Activity,
+  ChevronLeft
+} from "lucide-react";
+import { XPBar } from "@/components/game/xp-bar";
+import { FactionBadge } from "@/components/game/faction-badge";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Profile, Workout, CoachingAnswers, CoachingProgram, PlannedWorkout, CoachingWeek } from "@/lib/types";
+import { isDemoMode, demoProfile, demoWorkouts, demoCities } from "@/lib/demo-data";
+import { useLanguage } from "@/components/layout/language-provider";
+
+const PRESET_AVATARS = [
+  { name: "Shadow Runner", url: "https://api.dicebear.com/7.x/adventurer/svg?seed=Buster" },
+  { name: "Solar Cyclist", url: "https://api.dicebear.com/7.x/adventurer/svg?seed=Felix" },
+  { name: "Lunar Walker", url: "https://api.dicebear.com/7.x/adventurer/svg?seed=Aneka" },
+  { name: "Shadow Rogue", url: "https://api.dicebear.com/7.x/adventurer/svg?seed=Jack" },
+  { name: "Solar Cleric", url: "https://api.dicebear.com/7.x/adventurer/svg?seed=Lily" },
+  { name: "Lunar Paladin", url: "https://api.dicebear.com/7.x/adventurer/svg?seed=Sassy" },
+];
+
+export default function ProfilePage() {
+  const { t, language } = useLanguage();
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Edit Modal State
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editUsername, setEditUsername] = useState("");
+  const [editCity, setEditCity] = useState("");
+  const [editAge, setEditAge] = useState("");
+  const [editAvatar, setEditAvatar] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [dbWarning, setDbWarning] = useState(false);
+  const [importingStrava, setImportingStrava] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [apiSuggestions, setApiSuggestions] = useState<{ name: string; department_id: string }[]>([]);
+  const [apiLoading, setApiLoading] = useState(false);
+
+  // Equipped cosmetics state
+  const [equippedTitle, setEquippedTitle] = useState<string | null>(null);
+  const [equippedBorder, setEquippedBorder] = useState<string | null>(null);
+  const [equippedCompanion, setEquippedCompanion] = useState<string | null>(null);
+  const [unlockedItems, setUnlockedItems] = useState<string[]>([]);
+  const [customizerTab, setCustomizerTab] = useState<"titles" | "borders" | "companions">("titles");
+
+  // Coaching & Streak state
+  const [coachingProgram, setCoachingProgram] = useState<CoachingProgram | null>(null);
+  const [coachingStep, setCoachingStep] = useState<number>(0); // 0 = idle/active program, 1-4 = questionnaire steps
+  const [coachingAnswers, setCoachingAnswers] = useState<Partial<CoachingAnswers>>({});
+  const [bonusExpires, setBonusExpires] = useState<number | null>(null);
+  const [remainingBonusTime, setRemainingBonusTime] = useState<string>("");
+  const [activeWeekTab, setActiveWeekTab] = useState<number>(1);
+  const [workoutToAssociate, setWorkoutToAssociate] = useState<PlannedWorkout | null>(null);
+  const [showAssociateModal, setShowAssociateModal] = useState<boolean>(false);
+
+  // Cosmetics lists with unlocking conditions and limited editions
+  const titlesList = [
+    { id: "title-recruit", name: "Recrue", value: "Recrue", isDefault: true, limited: false },
+    { id: "title-adventurer", name: "Aventurier", value: "Aventurier", isDefault: true, limited: false },
+    { id: "title-yvelines", name: "Le Fléau des Yvelines", value: "Le Fléau des Yvelines", isDefault: false, limited: false },
+    { id: "title-malakoff", name: "Souverain de Malakoff", value: "Souverain de Malakoff", isDefault: false, limited: false },
+    { id: "title-denivele", name: "Légende du Dénivelé", value: "Légende du Dénivelé", isDefault: false, limited: true },
+    { id: "title-ombre", name: "Éclaireur de l'Ombre", value: "Éclaireur de l'Ombre", isDefault: false, limited: false },
+    { id: "title-soleil", name: "Champion Solaire", value: "Champion Solaire", isDefault: false, limited: false },
+    { id: "title-lune", name: "Nomade Lunaire", value: "Nomade Lunaire", isDefault: false, limited: false }
+  ];
+
+  const bordersList = [
+    { id: "border-none", name: "Sans Cadre", value: null, isDefault: true, limited: false },
+    { id: "border-rookie-iron", name: "Cadre en Fer", value: "rookie-iron", isDefault: true, limited: false },
+    { id: "border-shadow", name: "Aura de l'Ombre", value: "shadow-glow", isDefault: false, limited: false, faction: "Shadow Runners" },
+    { id: "border-solar", name: "Aurore Solaire", value: "solar-glow", isDefault: false, limited: false, faction: "Solar Cyclists" },
+    { id: "border-lunar", name: "Brume Lunaire", value: "lunar-glow", isDefault: false, limited: false, faction: "Lunar Walkers" },
+    { id: "border-rainbow", name: "Néon Arc-en-Ciel", value: "rainbow-glow", isDefault: false, limited: true },
+    { id: "border-gold", name: "Cadre de Maître", value: "gold-master-glow", isDefault: false, limited: true }
+  ];
+
+  const companionsList = [
+    { id: "companion-none", name: "Aucun", value: null, isDefault: true, limited: false },
+    { id: "companion-golem", name: "Mini-Golem", value: "Mini-Golem", isDefault: false, levelRequired: 3, limited: false },
+    { id: "companion-wolf", name: "Loup de l'Ombre", value: "Loup de l'Ombre", isDefault: false, faction: "Shadow Runners", limited: false },
+    { id: "companion-phoenix", name: "Phénix Solaire", value: "Phénix Solaire", isDefault: false, faction: "Solar Cyclists", limited: false },
+    { id: "companion-owl", name: "Chouette Lunaire", value: "Chouette Lunaire", isDefault: false, faction: "Lunar Walkers", limited: false },
+    { id: "companion-dragon", name: "Dragon Cosmique", value: "Dragon Cosmique", isDefault: false, levelRequired: 8, limited: true }
+  ];
+
+  const handleEquipCosmetic = (type: "title" | "border" | "companion", value: string | null) => {
+    if (!profile) return;
+    const profileId = profile.id;
+
+    if (type === "title") {
+      if (value) {
+        localStorage.setItem(`fitness-realm-equipped-title-${profileId}`, value);
+      } else {
+        localStorage.removeItem(`fitness-realm-equipped-title-${profileId}`);
+      }
+      setEquippedTitle(value);
+    } else if (type === "border") {
+      if (value) {
+        localStorage.setItem(`fitness-realm-equipped-border-${profileId}`, value);
+      } else {
+        localStorage.removeItem(`fitness-realm-equipped-border-${profileId}`);
+      }
+      setEquippedBorder(value);
+    } else if (type === "companion") {
+      if (value) {
+        localStorage.setItem(`fitness-realm-equipped-companion-${profileId}`, value);
+      } else {
+        localStorage.removeItem(`fitness-realm-equipped-companion-${profileId}`);
+      }
+      setEquippedCompanion(value);
+    }
+
+    window.dispatchEvent(new Event("fitness-realm-profile-updated"));
+  };
+
+  // Search cities via French Government API (or local fallback)
+  useEffect(() => {
+    const query = editCity.trim();
+    if (query.length < 2) {
+      setApiSuggestions([]);
+      return;
+    }
+
+    const delayDebounceFn = setTimeout(async () => {
+      setApiLoading(true);
+      try {
+        const res = await fetch(`https://geo.api.gouv.fr/communes?nom=${encodeURIComponent(query)}&limit=10&fields=nom,codeDepartement`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.length > 0) {
+            const formatted = data.map((item: any) => ({
+              name: item.nom,
+              department_id: item.codeDepartement,
+            }));
+            setApiSuggestions(formatted);
+            setApiLoading(false);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching French cities from API:", err);
+      }
+
+      // Fallback: search local demoCities if API fails or returns nothing
+      const lowercaseQuery = query.toLowerCase();
+      const localFiltered = demoCities
+        .filter((c) => c.name.toLowerCase().includes(lowercaseQuery))
+        .map((c) => ({
+          name: c.name,
+          department_id: c.department_id,
+        }));
+      setApiSuggestions(localFiltered);
+      setApiLoading(false);
+    }, 300); // 300ms debounce
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [editCity]);
+
+  const { runMastery, rideMastery, walkMastery } = React.useMemo(() => {
+    let runXP = 0;
+    let rideXP = 0;
+    let walkXP = 0;
+
+    workouts.forEach((w) => {
+      const xp = Number(w.xp_gained || w.distance * 100);
+      if (w.activity_type === "Run") {
+        runXP += xp;
+      } else if (w.activity_type === "Ride") {
+        rideXP += xp;
+      } else if (w.activity_type === "Walk" || w.activity_type === "Hike") {
+        walkXP += xp;
+      }
+    });
+
+    const getMastery = (xp: number) => {
+      let lvl = 1;
+      let req = 1000;
+      let temp = xp;
+      while (temp >= req) {
+        temp -= req;
+        lvl++;
+        req = lvl * 1000;
+      }
+      return { level: lvl, currentXP: temp, xpRequired: req };
+    };
+
+    return {
+      runMastery: getMastery(runXP),
+      rideMastery: getMastery(rideXP),
+      walkMastery: getMastery(walkXP),
+    };
+  }, [workouts]);
+
+  const isDemo = isDemoMode();
+
+  useEffect(() => {
+    async function getProfileData() {
+      let activeProfile: Profile | null = null;
+      let activeWorkouts: Workout[] = [];
+
+      if (isDemo) {
+        activeProfile = { ...demoProfile };
+        activeWorkouts = [...demoWorkouts];
+      } else {
+        try {
+          const { createClient } = await import("@/lib/supabase/client");
+          const supabase = createClient();
+          const { data: { user } } = await supabase.auth.getUser();
+          
+          if (user) {
+            const { data: profileData } = await supabase
+              .from("profiles")
+              .select("*")
+              .eq("id", user.id)
+              .single();
+            if (profileData) activeProfile = profileData;
+
+            const { data: workoutsData } = await supabase
+              .from("workouts")
+              .select("*")
+              .eq("user_id", user.id);
+            if (workoutsData) activeWorkouts = workoutsData;
+          }
+        } catch (err) {
+          console.error("Error fetching live profile:", err);
+        }
+      }
+
+      // Apply local storage overrides if present (useful for fallback or testing)
+      if (activeProfile) {
+        const fallbackKey = `fitness-realm-profile-fallback-${activeProfile.id}`;
+        const fallbackRaw = localStorage.getItem(fallbackKey);
+        if (fallbackRaw) {
+          try {
+            const fallback = JSON.parse(fallbackRaw);
+            activeProfile = {
+              ...activeProfile,
+              username: fallback.username || activeProfile.username,
+              avatar_url: fallback.avatar_url !== undefined ? fallback.avatar_url : activeProfile.avatar_url,
+              city: fallback.city !== undefined ? fallback.city : activeProfile.city,
+              age: fallback.age !== undefined ? fallback.age : activeProfile.age,
+              gold: fallback.gold !== undefined ? fallback.gold : activeProfile.gold,
+            };
+            
+            // If the local storage contains extra fields, we might have seen database warnings before
+            const warnedBefore = localStorage.getItem(`fitness-realm-db-warned-${activeProfile.id}`);
+            if (warnedBefore === "true") {
+              setDbWarning(true);
+            }
+          } catch (e) {
+            console.error("Error loading profile overrides:", e);
+          }
+        }
+
+        // Fetch equipped title, border, and companion
+        setEquippedTitle(localStorage.getItem(`fitness-realm-equipped-title-${activeProfile.id}`) || null);
+        setEquippedBorder(localStorage.getItem(`fitness-realm-equipped-border-${activeProfile.id}`) || null);
+        setEquippedCompanion(localStorage.getItem(`fitness-realm-equipped-companion-${activeProfile.id}`) || null);
+
+        // Load unlocked items from LocalStorage
+        const unlockedKey = `fitness-realm-unlocked-${activeProfile.id}`;
+        const unlockedRaw = localStorage.getItem(unlockedKey);
+        if (unlockedRaw) {
+          try {
+            setUnlockedItems(JSON.parse(unlockedRaw));
+          } catch {}
+        } else {
+          const defaultUnlocked = ["title-recruit"];
+          localStorage.setItem(unlockedKey, JSON.stringify(defaultUnlocked));
+          setUnlockedItems(defaultUnlocked);
+        }
+
+        // Load coaching program from LocalStorage
+        const programKey = `fitness-realm-coaching-program-${activeProfile.id}`;
+        const programRaw = localStorage.getItem(programKey);
+        if (programRaw) {
+          try {
+            const parsed = JSON.parse(programRaw);
+            setCoachingProgram(parsed);
+            setActiveWeekTab(parsed.currentWeekIndex + 1);
+          } catch {}
+        } else {
+          setCoachingProgram(null);
+        }
+
+        // Load bonus expiration from LocalStorage
+        const bonusKey = `fitness-realm-coaching-bonus-expires-${activeProfile.id}`;
+        const bonusRaw = localStorage.getItem(bonusKey);
+        if (bonusRaw) {
+          const exp = Number(bonusRaw);
+          if (exp > Date.now()) {
+            setBonusExpires(exp);
+          } else {
+            localStorage.removeItem(bonusKey);
+            setBonusExpires(null);
+          }
+        } else {
+          setBonusExpires(null);
+        }
+      }
+
+      if (activeProfile) setProfile(activeProfile);
+      setWorkouts(activeWorkouts);
+      setLoading(false);
+    }
+    
+    getProfileData();
+
+    const handleProfileUpdate = () => {
+      getProfileData();
+    };
+
+    window.addEventListener("fitness-realm-profile-updated", handleProfileUpdate);
+    return () => {
+      window.removeEventListener("fitness-realm-profile-updated", handleProfileUpdate);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!bonusExpires) {
+      setRemainingBonusTime("");
+      return;
+    }
+
+    const updateTime = () => {
+      const diff = bonusExpires - Date.now();
+      if (diff <= 0) {
+        setBonusExpires(null);
+        setRemainingBonusTime("");
+        window.dispatchEvent(new Event("fitness-realm-profile-updated"));
+      } else {
+        const hrs = Math.floor(diff / (1000 * 60 * 60));
+        const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const secs = Math.floor((diff % (1000 * 60)) / 1000);
+        setRemainingBonusTime(`${hrs}h ${mins}m ${secs}s`);
+      }
+    };
+
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, [bonusExpires]);
+
+  const getWorkoutWeekOffset = React.useCallback((startDateStr: string) => {
+    const refDate = isDemo ? new Date("2026-06-18T23:59:59Z") : new Date();
+    const startDate = new Date(startDateStr);
+    const diffTime = refDate.getTime() - startDate.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    if (diffDays >= 0 && diffDays < 7) return 0;
+    return -1;
+  }, [isDemo]);
+
+  const activeCoachingProgram = coachingProgram && Array.isArray(coachingProgram.weeks) ? coachingProgram : null;
+
+  const handleSubmitQuestionnaire = () => {
+    if (!profile) return;
+    const { sport, planType, currentCapacity, targetGoal, frequency, weeksCount } = coachingAnswers;
+    if (!sport || !planType || !currentCapacity || !targetGoal || !frequency || !weeksCount) return;
+
+    // Pace calculations (min/km)
+    let easyPace = "6:30";
+    let tempoPace = "5:45";
+    let intervalsPace = "5:15";
+
+    if (sport === "Run") {
+      if (currentCapacity === "none" || currentCapacity === "1km") {
+        easyPace = "7:30";
+        tempoPace = "6:45";
+        intervalsPace = "6:15";
+      } else if (currentCapacity === "5km") {
+        easyPace = "6:15";
+        tempoPace = "5:30";
+        intervalsPace = "5:00";
+      } else if (currentCapacity === "10km") {
+        easyPace = "5:30";
+        tempoPace = "4:45";
+        intervalsPace = "4:15";
+      } else {
+        // 20km+
+        easyPace = "4:45";
+        tempoPace = "4:00";
+        intervalsPace = "3:30";
+      }
+
+      // If performance goal, speed up by 30s/km
+      if (targetGoal === "time_performance") {
+        const speedUpPace = (paceStr: string): string => {
+          const parts = paceStr.split(":");
+          let min = parseInt(parts[0]);
+          let sec = parseInt(parts[1]);
+          sec -= 30;
+          if (sec < 0) {
+            sec += 60;
+            min -= 1;
+          }
+          return `${min}:${sec.toString().padStart(2, "0")}`;
+        };
+        easyPace = speedUpPace(easyPace);
+        tempoPace = speedUpPace(tempoPace);
+        intervalsPace = speedUpPace(intervalsPace);
+      }
+    } else if (sport === "Ride") {
+      // Cycling speed in km/h
+      if (currentCapacity === "none" || currentCapacity === "1km") {
+        easyPace = "18 km/h";
+        tempoPace = "22 km/h";
+        intervalsPace = "26 km/h";
+      } else if (currentCapacity === "5km") {
+        easyPace = "22 km/h";
+        tempoPace = "26 km/h";
+        intervalsPace = "30 km/h";
+      } else {
+        easyPace = "26 km/h";
+        tempoPace = "30 km/h";
+        intervalsPace = "35 km/h";
+      }
+      if (targetGoal === "time_performance") {
+        easyPace = `${parseInt(easyPace) + 3} km/h`;
+        tempoPace = `${parseInt(tempoPace) + 4} km/h`;
+        intervalsPace = `${parseInt(intervalsPace) + 5} km/h`;
+      }
+    } else {
+      // Walking speed in km/h
+      easyPace = "4.5 km/h";
+      tempoPace = "5.5 km/h";
+      intervalsPace = "6.5 km/h";
+      if (targetGoal === "time_performance") {
+        easyPace = "5.0 km/h";
+        tempoPace = "6.0 km/h";
+        intervalsPace = "7.0 km/h";
+      }
+    }
+
+    const weeks: CoachingWeek[] = [];
+
+    for (let w = 1; w <= weeksCount; w++) {
+      const workoutsList: PlannedWorkout[] = [];
+
+      // 1. Intervals workout
+      workoutsList.push({
+        id: `planned-${w}-1`,
+        name: language === "fr" ? `Semaine ${w} - Intervalles Vitesse` : `Week ${w} - Speed Intervals`,
+        type: "Intervals",
+        description: language === "fr" 
+          ? `Développer la VMA par des répétitions d'intervalles.`
+          : `Develop raw pacing and cardiorespiratory power.`,
+        structure: language === "fr"
+          ? [
+              "10 min Échauffement progressif",
+              `${4 + w}x 400m à Allure Intervalles (Cible: ${intervalsPace})`,
+              "90s de récupération active (marche/trot)",
+              "10 min Retour au calme"
+            ]
+          : [
+              "10 min progressive Warm-up",
+              `${4 + w}x 400m at Interval Pace (Target: ${intervalsPace})`,
+              "90s active jog/walk recovery",
+              "10 min Cool-down"
+            ],
+        targetPace: intervalsPace,
+        targetDistance: Math.round((2.0 + (4 + w) * 0.4 + 2.0) * 10) / 10,
+        targetDuration: null,
+        completed: false,
+        associatedWorkoutId: null,
+        paceAccuracy: null,
+        xpReward: 150,
+        goldReward: 50,
+      });
+
+      // 2. Tempo workout
+      workoutsList.push({
+        id: `planned-${w}-2`,
+        name: language === "fr" ? `Semaine ${w} - Seuil Lactique` : `Week ${w} - Lactate Threshold`,
+        type: "Tempo",
+        description: language === "fr"
+          ? `Améliorer la capacité aérobie à allure seuil stable.`
+          : `Improve aerobic capacity and run longer at high speed.`,
+        structure: language === "fr"
+          ? [
+              "10 min Échauffement",
+              `${10 + w * 2} min à Allure Seuil (Cible: ${tempoPace})`,
+              "10 min Retour au calme"
+            ]
+          : [
+              "10 min Warm-up",
+              `${10 + w * 2} min at Tempo Pace (Target: ${tempoPace})`,
+              "10 min Cool-down"
+            ],
+        targetPace: tempoPace,
+        targetDistance: null,
+        targetDuration: 20 + w * 2,
+        completed: false,
+        associatedWorkoutId: null,
+        paceAccuracy: null,
+        xpReward: 180,
+        goldReward: 60,
+      });
+
+      // 3. Long workout
+      workoutsList.push({
+        id: `planned-${w}-3`,
+        name: language === "fr" ? `Semaine ${w} - Sortie Longue` : `Week ${w} - Long Endurance Run`,
+        type: "Long",
+        description: language === "fr"
+          ? `Développer l'endurance fondamentale sur la distance.`
+          : `Develop base mileage and mental endurance.`,
+        structure: language === "fr"
+          ? [`${35 + w * 5} min à Allure Endurance (Cible: ${easyPace})`]
+          : [`${35 + w * 5} min at Easy Pace (Target: ${easyPace})`],
+        targetPace: easyPace,
+        targetDistance: Math.round((((35 + w * 5) / 6) * (sport === "Ride" ? 3 : 1)) * 10) / 10,
+        targetDuration: 35 + w * 5,
+        completed: false,
+        associatedWorkoutId: null,
+        paceAccuracy: null,
+        xpReward: 250,
+        goldReward: 80,
+      });
+
+      // 4. If frequency >= 4, add Easy Run
+      if (frequency >= 4) {
+        workoutsList.push({
+          id: `planned-${w}-4`,
+          name: language === "fr" ? `Semaine ${w} - Endurance Fondamentale` : `Week ${w} - Base Aerobic Run`,
+          type: "Easy",
+          description: language === "fr"
+            ? `Course de soutien pour accumuler du volume aérobie.`
+            : `Support run to build weekly volume safely.`,
+          structure: language === "fr"
+            ? [`30 min en Endurance Fondamentale (Cible: ${easyPace})`]
+            : [`30 min Easy Pace (Target: ${easyPace})`],
+          targetPace: easyPace,
+          targetDistance: sport === "Ride" ? 15.0 : 5.0,
+          targetDuration: 30,
+          completed: false,
+          associatedWorkoutId: null,
+          paceAccuracy: null,
+          xpReward: 120,
+          goldReward: 40,
+        });
+      }
+
+      // 5. If frequency === 5, add Recovery Run
+      if (frequency === 5) {
+        workoutsList.push({
+          id: `planned-${w}-5`,
+          name: language === "fr" ? `Semaine ${w} - Récupération Active` : `Week ${w} - Recovery Run`,
+          type: "Recovery",
+          description: language === "fr"
+            ? `Récupération active très facile pour éliminer les toxines.`
+            : `Very easy recovery run to clean muscles and feel active.`,
+          structure: language === "fr"
+            ? [`20 min Trot léger en récupération active (Cible: ${easyPace})`]
+            : [`20 min Easy recovery trot (Target: ${easyPace})`],
+          targetPace: easyPace,
+          targetDistance: sport === "Ride" ? 10.0 : 3.0,
+          targetDuration: 20,
+          completed: false,
+          associatedWorkoutId: null,
+          paceAccuracy: null,
+          xpReward: 100,
+          goldReward: 30,
+        });
+      }
+
+      weeks.push({
+        weekNumber: w,
+        workouts: workoutsList,
+        status: "pending",
+        adaptationReport: null,
+      });
+    }
+
+    const newProgram: CoachingProgram = {
+      name: language === "fr"
+        ? `Plan ${planType.toUpperCase()} (${weeksCount} Semaines)`
+        : `${planType.toUpperCase()} Plan (${weeksCount} Weeks)`,
+      sport,
+      planType,
+      currentWeekIndex: 0,
+      targetPaces: {
+        easy: easyPace,
+        tempo: tempoPace,
+        intervals: intervalsPace,
+      },
+      weeks,
+      claimed: false,
+    };
+
+    const programKey = `fitness-realm-coaching-program-${profile.id}`;
+    localStorage.setItem(programKey, JSON.stringify(newProgram));
+    setCoachingProgram(newProgram);
+    setCoachingStep(0);
+    setActiveWeekTab(1);
+  };
+
+  const handleClaimCoachingBonus = () => {
+    if (!profile || !coachingProgram) return;
+
+    // Set expiration in LocalStorage to 72 hours from now
+    const expiresAt = Date.now() + 72 * 60 * 60 * 1000;
+    const bonusKey = `fitness-realm-coaching-bonus-expires-${profile.id}`;
+    localStorage.setItem(bonusKey, String(expiresAt));
+    setBonusExpires(expiresAt);
+
+    // Mark current week as claimed
+    const programKey = `fitness-realm-coaching-program-${profile.id}`;
+    const updatedProgram = {
+      ...coachingProgram,
+      claimed: true,
+    };
+    localStorage.setItem(programKey, JSON.stringify(updatedProgram));
+    setCoachingProgram(updatedProgram);
+
+    window.dispatchEvent(new Event("fitness-realm-profile-updated"));
+  };
+
+  const handleResetCoaching = () => {
+    if (!profile) return;
+    const confirmReset = window.confirm(
+      language === "fr"
+        ? "Voulez-vous vraiment réinitialiser votre programme de coaching ?"
+        : "Are you sure you want to reset your coaching program?"
+    );
+    if (!confirmReset) return;
+
+    const programKey = `fitness-realm-coaching-program-${profile.id}`;
+    localStorage.removeItem(programKey);
+    setCoachingProgram(null);
+    setCoachingStep(1);
+    setCoachingAnswers({});
+  };
+
+  const handleAssociateWorkout = (plannedWorkoutId: string, loggedWorkoutId: string) => {
+    if (!profile || !coachingProgram) return;
+
+    const loggedWorkout = workouts.find((w) => w.id === loggedWorkoutId);
+    if (!loggedWorkout) return;
+
+    const updatedWeeks = coachingProgram.weeks.map((week) => {
+      const updatedWorkouts = week.workouts.map((w) => {
+        if (w.id === plannedWorkoutId) {
+          const targetDist = w.targetDistance || 5.0;
+          const matchRatio = Math.min(loggedWorkout.distance / targetDist, targetDist / loggedWorkout.distance);
+          const paceAccuracy = Math.round((0.85 + Math.random() * 0.14) * 100);
+
+          return {
+            ...w,
+            completed: true,
+            associatedWorkoutId: loggedWorkoutId,
+            paceAccuracy: matchRatio >= 0.8 ? paceAccuracy : 75,
+          };
+        }
+        return w;
+      });
+      return { ...week, workouts: updatedWorkouts };
+    });
+
+    const activeWeek = updatedWeeks[coachingProgram.currentWeekIndex];
+    const plannedWorkout = activeWeek.workouts.find((w) => w.id === plannedWorkoutId);
+    if (!plannedWorkout) return;
+
+    const xpReward = plannedWorkout.xpReward || 150;
+    const goldReward = plannedWorkout.goldReward || 50;
+
+    let currentLevel = profile.level;
+    let currentXP = profile.xp;
+    let currentGold = profile.gold;
+
+    let totalXP = currentXP + xpReward;
+    while (totalXP >= 1000 * currentLevel) {
+      totalXP -= 1000 * currentLevel;
+      currentLevel += 1;
+    }
+    currentXP = totalXP;
+    currentGold += goldReward;
+
+    const updatedProfile = {
+      ...profile,
+      level: currentLevel,
+      xp: currentXP,
+      gold: currentGold,
+    };
+
+    setProfile(updatedProfile);
+    const fallbackKey = `fitness-realm-profile-fallback-${profile.id}`;
+    localStorage.setItem(fallbackKey, JSON.stringify(updatedProfile));
+
+    const updatedProgram: CoachingProgram = {
+      ...coachingProgram,
+      weeks: updatedWeeks,
+    };
+    const programKey = `fitness-realm-coaching-program-${profile.id}`;
+    localStorage.setItem(programKey, JSON.stringify(updatedProgram));
+    setCoachingProgram(updatedProgram);
+
+    setWorkoutToAssociate(null);
+    setShowAssociateModal(false);
+
+    window.dispatchEvent(new Event("fitness-realm-profile-updated"));
+
+    alert(
+      language === "fr"
+        ? `🎉 Entraînement associé ! +${xpReward} XP et +${goldReward} Or gagnés !`
+        : `🎉 Workout associated! +${xpReward} XP and +${goldReward} Gold earned!`
+    );
+  };
+
+  const handleCloseWeek = () => {
+    if (!profile || !coachingProgram) return;
+
+    const currentWeek = coachingProgram.weeks[coachingProgram.currentWeekIndex];
+    const totalWorkouts = currentWeek.workouts.length;
+    const completedWorkouts = currentWeek.workouts.filter((w) => w.completed).length;
+
+    const completionRate = completedWorkouts / totalWorkouts;
+
+    let weekStatus: 'completed' | 'partial' | 'failed' = 'partial';
+    let report = "";
+
+    if (completionRate === 1.0) {
+      weekStatus = 'completed';
+      report = language === "fr"
+        ? "Félicitations ! Semaine complétée à 100%. Surcharge progressive appliquée : volume augmenté de +10% pour la semaine suivante."
+        : "Congratulations! Week completed at 100%. Progressive overload applied: volume increased by +10% for the next week.";
+    } else if (completionRate >= 0.5) {
+      weekStatus = 'partial';
+      report = language === "fr"
+        ? "Bon travail. Semaine partiellement complétée. Volume stabilisé pour la semaine suivante."
+        : "Good job. Week partially completed. Volume stabilized for the next week.";
+    } else {
+      weekStatus = 'failed';
+      report = language === "fr"
+        ? "Semaine incomplète. Volume de la semaine suivante réduit de -10% pour récupération et entraînements non complétés reportés."
+        : "Week incomplete. Next week volume reduced by -10% for recovery, and incomplete sessions rolled over.";
+    }
+
+    const updatedWeeks = coachingProgram.weeks.map((week, idx) => {
+      if (idx === coachingProgram.currentWeekIndex) {
+        return {
+          ...week,
+          status: weekStatus,
+          adaptationReport: report,
+        };
+      }
+      if (weekStatus === 'failed' && idx === coachingProgram.currentWeekIndex + 1) {
+        const incompleteWorkouts = currentWeek.workouts
+          .filter((w) => !w.completed)
+          .map((w) => ({
+            ...w,
+            id: `${w.id}-rollover`,
+            name: `${w.name} (Reporté)`,
+            completed: false,
+            associatedWorkoutId: null,
+            paceAccuracy: null,
+          }));
+
+        const adaptedNextWorkouts = week.workouts.map((w) => {
+          return {
+            ...w,
+            targetDistance: w.targetDistance ? Math.round(w.targetDistance * 0.9 * 10) / 10 : null,
+            targetDuration: w.targetDuration ? Math.round(w.targetDuration * 0.9) : null,
+          };
+        });
+
+        return {
+          ...week,
+          workouts: [...adaptedNextWorkouts, ...incompleteWorkouts],
+        };
+      }
+
+      if (weekStatus === 'completed' && idx === coachingProgram.currentWeekIndex + 1) {
+        const adaptedNextWorkouts = week.workouts.map((w) => {
+          return {
+            ...w,
+            targetDistance: w.targetDistance ? Math.round(w.targetDistance * 1.1 * 10) / 10 : null,
+            targetDuration: w.targetDuration ? Math.round(w.targetDuration * 1.1) : null,
+          };
+        });
+        return {
+          ...week,
+          workouts: adaptedNextWorkouts,
+        };
+      }
+
+      return week;
+    });
+
+    const isLastWeek = coachingProgram.currentWeekIndex === coachingProgram.weeks.length - 1;
+    const nextWeekIndex = isLastWeek ? coachingProgram.currentWeekIndex : coachingProgram.currentWeekIndex + 1;
+
+    const updatedProgram: CoachingProgram = {
+      ...coachingProgram,
+      currentWeekIndex: nextWeekIndex,
+      weeks: updatedWeeks,
+      claimed: false,
+    };
+
+    const programKey = `fitness-realm-coaching-program-${profile.id}`;
+    localStorage.setItem(programKey, JSON.stringify(updatedProgram));
+    setCoachingProgram(updatedProgram);
+    setActiveWeekTab(nextWeekIndex + 1);
+
+    window.dispatchEvent(new Event("fitness-realm-profile-updated"));
+
+    alert(
+      language === "fr"
+        ? `Semaine clôturée avec succès !\nStatut : ${weekStatus === 'completed' ? '🏆 Complétée' : weekStatus === 'partial' ? '⚡ Partielle' : '⚠️ Échouée'}\n${report}`
+        : `Week closed successfully!\nStatus: ${weekStatus === 'completed' ? '🏆 Completed' : weekStatus === 'partial' ? '⚡ Partial' : '⚠️ Failed'}\n${report}`
+    );
+  };
+
+  const handleConnectStrava = () => {
+    if (isDemo) {
+      alert(
+        language === "fr"
+          ? "Mode Démo — La connexion Strava nécessite un vrai backend Supabase."
+          : "Demo Mode — Strava connection requires a real Supabase backend."
+      );
+      return;
+    }
+    window.location.href = "/api/strava/connect";
+  };
+
+  const handleDisconnectStrava = async () => {
+    if (!profile) return;
+    if (isDemo) {
+      setProfile((prev) =>
+        prev
+          ? { ...prev, strava_athlete_id: null, strava_access_token: null, strava_refresh_token: null, strava_expires_at: null }
+          : null
+      );
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { createClient } = await import("@/lib/supabase/client");
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          strava_athlete_id: null,
+          strava_access_token: null,
+          strava_refresh_token: null,
+          strava_expires_at: null,
+        })
+        .eq("id", profile.id);
+
+      if (error) throw error;
+      setProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              strava_athlete_id: null,
+              strava_access_token: null,
+              strava_refresh_token: null,
+              strava_expires_at: null,
+            }
+          : null
+      );
+    } catch (err) {
+      console.error("Error disconnecting Strava:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleImportStravaProfile = async () => {
+    if (isDemo) {
+      setEditUsername("Warrior_Strava");
+      setEditCity("Paris");
+      setEditAvatar("https://api.dicebear.com/7.x/adventurer/svg?seed=Buster");
+      alert(
+        language === "fr"
+          ? "Mode Démo — Profil simulé importé depuis Strava !"
+          : "Demo Mode — Simulated profile imported from Strava!"
+      );
+      return;
+    }
+
+    setImportingStrava(true);
+    try {
+      const res = await fetch("/api/strava/athlete");
+      if (!res.ok) {
+        throw new Error("Strava endpoint error");
+      }
+      const data = await res.json();
+      if (data) {
+        if (data.firstname || data.lastname) {
+          setEditUsername(`${data.firstname || ""}${data.lastname ? "_" + data.lastname.substring(0, 1) : ""}`);
+        }
+        if (data.city) {
+          setEditCity(data.city);
+        }
+        if (data.profile) {
+          setEditAvatar(data.profile);
+        }
+      }
+    } catch (err) {
+      console.error("Error importing Strava profile details:", err);
+      alert(
+        language === "fr"
+          ? "Impossible d'importer. Assurez-vous que Strava est connecté et que votre connexion internet est active."
+          : "Could not import. Make sure Strava is connected and your internet connection is active."
+      );
+    } finally {
+      setImportingStrava(false);
+    }
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profile) return;
+
+    const updates = {
+      username: editUsername.trim() || profile.username,
+      city: editCity.trim() || null,
+      age: editAge.trim() ? parseInt(editAge) : null,
+      avatar_url: editAvatar.trim() || null,
+    };
+
+    // Save to LocalStorage as a fallback mirror
+    const fallbackKey = `fitness-realm-profile-fallback-${profile.id}`;
+    localStorage.setItem(fallbackKey, JSON.stringify(updates));
+
+    if (isDemo) {
+      setProfile((prev) => prev ? { ...prev, ...updates } : null);
+      setIsEditOpen(false);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const { createClient } = await import("@/lib/supabase/client");
+      const supabase = createClient();
+      
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          username: updates.username,
+          avatar_url: updates.avatar_url,
+          city: updates.city,
+          age: updates.age,
+        })
+        .eq("id", profile.id);
+
+      if (error) {
+        console.warn("Supabase update error (columns likely missing):", error);
+        // Show SQL warning card and store warning state in LocalStorage
+        setDbWarning(true);
+        localStorage.setItem(`fitness-realm-db-warned-${profile.id}`, "true");
+      } else {
+        setDbWarning(false);
+        localStorage.removeItem(`fitness-realm-db-warned-${profile.id}`);
+      }
+
+      setProfile((prev) => prev ? { ...prev, ...updates } : null);
+      setIsEditOpen(false);
+    } catch (err) {
+      console.error("Error saving profile details:", err);
+      setDbWarning(true);
+      localStorage.setItem(`fitness-realm-db-warned-${profile.id}`, "true");
+      setProfile((prev) => prev ? { ...prev, ...updates } : null);
+      setIsEditOpen(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
+        <RefreshCw className="h-8 w-8 text-violet-500 animate-spin" />
+        <span className="font-orbitron text-xs tracking-widest text-slate-500 uppercase">
+          {t("loading")}
+        </span>
+      </div>
+    );
+  }
+
+  // Aggregate stats
+  const totalQuests = workouts.length;
+  const totalDist = workouts.reduce((sum, w) => sum + Number(w.distance), 0);
+  const totalElev = workouts.reduce((sum, w) => sum + Number(w.elevation_gain), 0);
+  const avgHR = workouts.filter((w) => w.avg_heartrate).length 
+    ? workouts.reduce((sum, w) => sum + Number(w.avg_heartrate || 0), 0) / workouts.filter((w) => w.avg_heartrate).length
+    : 0;
+
+  const joinDate = profile
+    ? new Date(profile.created_at).toLocaleDateString(language === "fr" ? "fr-FR" : "en-US", {
+        month: "long",
+        year: "numeric",
+      })
+    : "";
+
+  return (
+    <div className="space-y-6">
+      {/* DB Migration warning if columns are missing */}
+      {dbWarning && (
+        <Card glowColor="rose" className="border-rose-900/50 bg-rose-950/10 p-5 border-l-4 border-l-rose-500">
+          <div className="flex flex-col md:flex-row md:items-start gap-4">
+            <div className="h-10 w-10 rounded-lg bg-rose-950/50 border border-rose-800 flex items-center justify-center text-rose-500 shrink-0 font-bold text-lg">
+              ⚠️
+            </div>
+            <div className="space-y-3 flex-1">
+              <div>
+                <h4 className="font-orbitron font-extrabold text-sm text-rose-400 uppercase tracking-widest">
+                  {language === "fr" ? "BASE DE DONNÉES INCOMPLÈTE" : "DATABASE SCHEMA INCOMPLETE"}
+                </h4>
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                  {language === "fr"
+                    ? "Les colonnes 'city' et 'age' sont manquantes dans votre table 'public.profiles'. Vos modifications sont enregistrées localement dans votre navigateur (LocalStorage), mais pour qu'elles se synchronisent sur le serveur, veuillez exécuter ce script SQL dans l'éditeur de requêtes Supabase :"
+                    : "The 'city' and 'age' columns are missing in your 'public.profiles' table. Your changes are saved locally in your browser (LocalStorage), but to synchronize them to the cloud, please run this SQL script in your Supabase SQL editor:"}
+                </p>
+              </div>
+              
+              <div className="relative bg-slate-950/80 rounded-lg p-3 border border-slate-900 font-mono text-[11px] text-slate-300 select-all max-w-full overflow-x-auto">
+                <pre>{`ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS city TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS age INTEGER;`}</pre>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(
+                      "ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS city TEXT;\nALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS age INTEGER;"
+                    );
+                    alert(language === "fr" ? "SQL Copié dans le presse-papiers !" : "SQL Copied to clipboard!");
+                  }}
+                  className="absolute right-2 top-2 p-1.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 transition flex items-center gap-1 text-[10px] font-orbitron"
+                  title="Copy to clipboard"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  <span>{language === "fr" ? "COPIER" : "COPY"}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Side: Avatar Panel & Cosmetics Customizer */}
+        <div className="space-y-6">
+          <Card glowColor="violet" className="flex flex-col items-center text-center p-6 border-slate-900 bg-[#111128]/60">
+          <div className="relative mb-5 mt-4">
+            <div className={`rounded-3xl p-1 bg-slate-950/60 ${
+              equippedBorder === "shadow-glow"
+                ? "shadow-[0_0_15px_rgba(139,92,246,0.7)] border border-violet-500/50"
+                : equippedBorder === "solar-glow"
+                ? "shadow-[0_0_15px_rgba(245,158,11,0.7)] border border-amber-500/50"
+                : equippedBorder === "lunar-glow"
+                ? "shadow-[0_0_15px_rgba(6,182,212,0.7)] border border-cyan-500/50"
+                : equippedBorder === "rainbow-glow"
+                ? "shadow-[0_0_18px_rgba(236,72,153,0.8)] border border-pink-500/50 animate-pulse"
+                : equippedBorder === "gold-master-glow"
+                ? "shadow-[0_0_15px_rgba(234,179,8,0.8)] border border-yellow-400/70"
+                : equippedBorder === "rookie-iron"
+                ? "border-2 border-slate-500 shadow-[0_0_8px_rgba(148,163,184,0.4)]"
+                : "border border-slate-800"
+            }`}>
+              {profile?.avatar_url ? (
+                <img
+                  src={profile.avatar_url}
+                  alt={profile.username || "Warrior"}
+                  className="h-24 w-24 rounded-2xl object-cover shadow-inner"
+                  onError={(e) => {
+                    // Fallback on image error
+                    (e.target as HTMLElement).style.display = 'none';
+                  }}
+                />
+              ) : null}
+              {!profile?.avatar_url ? (
+                <div className="h-24 w-24 rounded-2xl bg-slate-900 flex items-center justify-center font-orbitron text-3xl font-black text-slate-355 shadow-inner relative overflow-hidden">
+                  {profile?.username?.substring(0, 2).toUpperCase() || "W"}
+                </div>
+              ) : null}
+            </div>
+            <div className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full bg-violet-600 border-2 border-[#111128] flex items-center justify-center font-orbitron text-xs font-black text-slate-100 shadow-lg">
+              {profile?.level}
+            </div>
+          </div>
+
+          <h2 className="font-orbitron font-extrabold text-xl text-slate-100 uppercase tracking-widest mb-0.5">
+            {profile?.username || "Warrior"}
+          </h2>
+
+          {equippedTitle && (
+            <div className="text-[11px] font-orbitron font-bold text-violet-400 tracking-wider mb-2 uppercase animate-pulse">
+              🛡️ {equippedTitle}
+            </div>
+          )}
+          
+          <div className="mb-2">
+            {profile && <FactionBadge faction={profile.faction} />}
+          </div>
+
+          {equippedCompanion && (
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 mb-2 bg-slate-900 border border-slate-850 rounded-full text-[9px] font-bold text-amber-455 font-orbitron uppercase tracking-wider">
+              🐾 {equippedCompanion}
+            </div>
+          )}
+
+          {/* City & Age Badges */}
+          <div className="space-y-1.5 my-3 flex flex-col items-center font-orbitron tracking-wider text-[11px] font-semibold text-slate-350">
+            {profile?.city && (
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-950/40 rounded-full border border-slate-900/50">
+                <MapPin className="h-3 w-3 text-cyan-400" />
+                <span>{profile.city}</span>
+              </div>
+            )}
+            {profile?.age && (
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-950/40 rounded-full border border-slate-900/50">
+                <span>🎂 {profile.age} {language === "fr" ? "ans" : "y/o"}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-center gap-1.5 text-xs text-slate-500 mb-4 font-orbitron font-semibold uppercase tracking-wider">
+            <Calendar className="h-3.5 w-3.5 text-slate-650" />
+            <span>{t("joinedDate", { date: joinDate })}</span>
+          </div>
+
+          {/* Edit Profile Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full mb-3 flex items-center justify-center gap-2 border-violet-500/30 text-violet-400 hover:bg-violet-950/20"
+            onClick={() => {
+              setEditUsername(profile?.username || "");
+              setEditCity(profile?.city || "");
+              setEditAge(profile?.age ? String(profile.age) : "");
+              setEditAvatar(profile?.avatar_url || "");
+              setIsEditOpen(true);
+            }}
+          >
+            <Edit2 className="h-3.5 w-3.5" />
+            <span>{language === "fr" ? "Modifier le Profil" : "Edit Profile"}</span>
+          </Button>
+
+          {/* Shop and Faction Pass Links */}
+          <div className="grid grid-cols-2 gap-2 w-full mb-6">
+            <Link href="/shop" className="w-full">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full flex items-center justify-center gap-1.5 border-amber-500/30 text-amber-400 hover:bg-amber-950/20 text-[10px] py-2 font-orbitron"
+              >
+                <Coins className="h-3.5 w-3.5" />
+                <span>{language === "fr" ? "Boutique" : "Shop"}</span>
+              </Button>
+            </Link>
+            <Link href="/faction-pass" className="w-full">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full flex items-center justify-center gap-1.5 border-cyan-500/30 text-cyan-400 hover:bg-cyan-950/20 text-[10px] py-2 font-orbitron"
+              >
+                <Flame className="h-3.5 w-3.5 animate-pulse" />
+                <span>{language === "fr" ? "Pass Faction" : "Pass"}</span>
+              </Button>
+            </Link>
+          </div>
+
+          {/* Strava Integration Block */}
+          <div className="w-full pt-6 border-t border-slate-900/60 space-y-4">
+            <span className="block font-orbitron text-[10px] font-bold text-slate-500 tracking-widest uppercase">
+              {t("stravaConnection")}
+            </span>
+            
+            {profile?.strava_athlete_id ? (
+              <div className="space-y-3">
+                <div className="p-3 bg-emerald-950/15 border border-emerald-900/30 rounded-lg flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-left">
+                    <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <div>
+                      <span className="block text-xs font-semibold text-emerald-400">{t("connected")}</span>
+                      <span className="block text-[10px] text-slate-500">ID: {profile.strava_athlete_id}</span>
+                    </div>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-rose-450 hover:bg-rose-950/10 hover:border-rose-950/30"
+                  onClick={handleDisconnectStrava}
+                >
+                  {t("disconnectStrava")}
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-slate-455 leading-relaxed">
+                  {t("connectStravaDesc")}
+                </p>
+                <Button variant="accent" className="w-full py-2.5" onClick={handleConnectStrava}>
+                  {t("connectStrava")}
+                </Button>
+              </div>
+            )}
+          </div>
+        </Card>
+
+        {/* Appearance Inventory Customizer */}
+        {profile && (
+          <Card glowColor="none" className="border-slate-900 bg-[#111128]/60 p-5 space-y-4">
+            <CardHeader className="p-0 border-b border-slate-900/40 pb-3 flex flex-row items-center justify-between">
+              <CardTitle className="text-xs font-orbitron font-extrabold text-slate-100 uppercase tracking-widest flex items-center gap-2">
+                <Sparkles className="h-4.5 w-4.5 text-violet-400 animate-pulse" />
+                <span>{language === "fr" ? "Inventaire d'Apparence" : "Appearance Inventory"}</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0 space-y-4 pt-1">
+              {/* Tabs */}
+              <div className="flex gap-1 border-b border-slate-950 pb-2">
+                <button
+                  type="button"
+                  onClick={() => setCustomizerTab("titles")}
+                  className={`flex-1 py-1.5 font-orbitron text-[9px] font-bold tracking-wider uppercase border-b-2 transition-all ${
+                    customizerTab === "titles"
+                      ? "text-violet-400 border-violet-500"
+                      : "text-slate-500 border-transparent hover:text-slate-350"
+                  }`}
+                >
+                  🏆 {language === "fr" ? "Titres" : "Titles"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCustomizerTab("borders")}
+                  className={`flex-1 py-1.5 font-orbitron text-[9px] font-bold tracking-wider uppercase border-b-2 transition-all ${
+                    customizerTab === "borders"
+                      ? "text-violet-400 border-violet-500"
+                      : "text-slate-500 border-transparent hover:text-slate-350"
+                  }`}
+                >
+                  ✨ {language === "fr" ? "Bordures" : "Borders"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCustomizerTab("companions")}
+                  className={`flex-1 py-1.5 font-orbitron text-[9px] font-bold tracking-wider uppercase border-b-2 transition-all ${
+                    customizerTab === "companions"
+                      ? "text-violet-400 border-violet-500"
+                      : "text-slate-500 border-transparent hover:text-slate-350"
+                  }`}
+                >
+                  🐾 {language === "fr" ? "Compagnons" : "Pets"}
+                </button>
+              </div>
+
+              {/* Items List */}
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {customizerTab === "titles" &&
+                  titlesList.map((item) => {
+                    const isUnlocked = item.isDefault || unlockedItems.includes(item.id);
+                    const isEquipped = equippedTitle === item.value;
+
+                    return (
+                      <div
+                        key={item.id}
+                        className={`p-2.5 rounded-lg border text-xs flex items-center justify-between transition ${
+                          isEquipped
+                            ? "bg-violet-950/15 border-violet-500/40"
+                            : isUnlocked
+                            ? "bg-slate-950/40 border-slate-900 hover:border-slate-800"
+                            : "bg-slate-950/20 border-slate-950 opacity-60"
+                        }`}
+                      >
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-orbitron font-bold text-[11px] text-slate-200">
+                              {item.name}
+                            </span>
+                            {item.limited && (
+                              <span className="bg-amber-500/10 border border-amber-500/25 text-amber-500 text-[8px] font-orbitron font-extrabold px-1 rounded uppercase tracking-wider scale-90">
+                                {language === "fr" ? "Éd. Limitée" : "Ltd Ed."}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-500 font-medium font-orbitron uppercase">
+                            {isUnlocked ? (language === "fr" ? "Débloqué" : "Unlocked") : (language === "fr" ? "Verrouillé (Boutique)" : "Locked (Shop)")}
+                          </span>
+                        </div>
+
+                        {isUnlocked ? (
+                          <Button
+                            type="button"
+                            variant={isEquipped ? "outline" : "primary"}
+                            size="sm"
+                            className="text-[10px] px-2.5 py-1 font-orbitron font-bold"
+                            onClick={() => handleEquipCosmetic("title", isEquipped ? null : item.value)}
+                          >
+                            {isEquipped ? (language === "fr" ? "Déséquiper" : "Unequip") : (language === "fr" ? "Équiper" : "Equip")}
+                          </Button>
+                        ) : (
+                          <Link href="/shop">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="text-[10px] px-2.5 py-1 border-slate-800 text-slate-500 hover:text-slate-350 font-orbitron font-bold"
+                            >
+                              {language === "fr" ? "Acheter" : "Buy"}
+                            </Button>
+                          </Link>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                {customizerTab === "borders" &&
+                  bordersList.map((item) => {
+                    const isUnlocked =
+                      item.isDefault ||
+                      unlockedItems.includes(item.id) ||
+                      (item.faction && profile.faction === item.faction);
+
+                    const isEquipped = equippedBorder === item.value;
+
+                    return (
+                      <div
+                        key={item.id}
+                        className={`p-2.5 rounded-lg border text-xs flex items-center justify-between transition ${
+                          isEquipped
+                            ? "bg-violet-950/15 border-violet-500/40"
+                            : isUnlocked
+                            ? "bg-slate-950/40 border-slate-900 hover:border-slate-800"
+                            : "bg-slate-950/20 border-slate-950 opacity-60"
+                        }`}
+                      >
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-orbitron font-bold text-[11px] text-slate-200">
+                              {item.name}
+                            </span>
+                            {item.limited && (
+                              <span className="bg-amber-500/10 border border-amber-500/25 text-amber-500 text-[8px] font-orbitron font-extrabold px-1 rounded uppercase tracking-wider scale-90">
+                                {language === "fr" ? "Éd. Limitée" : "Ltd Ed."}
+                              </span>
+                            )}
+                            {item.faction && (
+                              <span className="bg-violet-500/10 border border-violet-500/25 text-violet-400 text-[8px] font-orbitron font-extrabold px-1 rounded uppercase tracking-wider scale-90">
+                                {language === "fr" ? "Faction" : "Faction"}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-500 font-medium font-orbitron uppercase">
+                            {isUnlocked
+                              ? (language === "fr" ? "Débloqué" : "Unlocked")
+                              : item.faction
+                              ? `${language === "fr" ? "Rejoindre" : "Join"} ${item.faction}`
+                              : (language === "fr" ? "Verrouillé (Boutique)" : "Locked (Shop)")}
+                          </span>
+                        </div>
+
+                        {isUnlocked ? (
+                          <Button
+                            type="button"
+                            variant={isEquipped ? "outline" : "primary"}
+                            size="sm"
+                            className="text-[10px] px-2.5 py-1 font-orbitron font-bold"
+                            onClick={() => handleEquipCosmetic("border", isEquipped ? null : item.value)}
+                          >
+                            {isEquipped ? (language === "fr" ? "Déséquiper" : "Unequip") : (language === "fr" ? "Équiper" : "Equip")}
+                          </Button>
+                        ) : item.faction ? (
+                          <span className="text-[10px] font-orbitron font-bold text-slate-650 uppercase pr-2">
+                            🔒 {language === "fr" ? "Faction" : "Faction"}
+                          </span>
+                        ) : (
+                          <Link href="/shop">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="text-[10px] px-2.5 py-1 border-slate-800 text-slate-550 hover:text-slate-300 font-orbitron font-bold"
+                            >
+                              {language === "fr" ? "Acheter" : "Buy"}
+                            </Button>
+                          </Link>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                {customizerTab === "companions" &&
+                  companionsList.map((item) => {
+                    const meetsLevel = !item.levelRequired || profile.level >= item.levelRequired;
+                    const meetsFaction = !item.faction || profile.faction === item.faction;
+                    const isUnlocked = item.isDefault || (meetsLevel && meetsFaction);
+                    const isEquipped = equippedCompanion === item.value;
+
+                    return (
+                      <div
+                        key={item.id}
+                        className={`p-2.5 rounded-lg border text-xs flex items-center justify-between transition ${
+                          isEquipped
+                            ? "bg-violet-950/15 border-violet-500/40"
+                            : isUnlocked
+                            ? "bg-slate-950/40 border-slate-900 hover:border-slate-800"
+                            : "bg-slate-950/20 border-slate-950 opacity-60"
+                        }`}
+                      >
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-orbitron font-bold text-[11px] text-slate-200">
+                              {item.name}
+                            </span>
+                            {item.limited && (
+                              <span className="bg-amber-500/10 border border-amber-500/25 text-amber-500 text-[8px] font-orbitron font-extrabold px-1 rounded uppercase tracking-wider scale-90">
+                                {language === "fr" ? "Éd. Limitée" : "Ltd Ed."}
+                              </span>
+                            )}
+                            {item.levelRequired && (
+                              <span className="bg-cyan-500/10 border border-cyan-500/25 text-cyan-400 text-[8px] font-orbitron font-extrabold px-1 rounded uppercase tracking-wider scale-90">
+                                Niv. {item.levelRequired}+
+                              </span>
+                            )}
+                            {item.faction && (
+                              <span className="bg-violet-500/10 border border-violet-500/25 text-violet-400 text-[8px] font-orbitron font-extrabold px-1 rounded uppercase tracking-wider scale-90">
+                                {language === "fr" ? "Faction" : "Faction"}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-500 font-medium font-orbitron uppercase">
+                            {isUnlocked
+                              ? (language === "fr" ? "Débloqué" : "Unlocked")
+                              : item.levelRequired && profile.level < item.levelRequired
+                              ? `${language === "fr" ? "Niveau requis" : "Requires Lvl"} ${item.levelRequired}`
+                              : `${language === "fr" ? "Rejoindre" : "Join"} ${item.faction}`}
+                          </span>
+                        </div>
+
+                        {isUnlocked ? (
+                          <Button
+                            type="button"
+                            variant={isEquipped ? "outline" : "primary"}
+                            size="sm"
+                            className="text-[10px] px-2.5 py-1 font-orbitron font-bold"
+                            onClick={() => handleEquipCosmetic("companion", isEquipped ? null : item.value)}
+                          >
+                            {isEquipped ? (language === "fr" ? "Déséquiper" : "Unequip") : (language === "fr" ? "Équiper" : "Equip")}
+                          </Button>
+                        ) : (
+                          <span className="text-[10px] font-orbitron font-bold text-slate-650 uppercase pr-2">
+                            🔒 {language === "fr" ? "Verrouillé" : "Locked"}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* Right Side: Hero stats detail */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* XP Bar */}
+          {profile && (
+            <XPBar
+              level={profile.level}
+              currentXP={profile.xp}
+              xpRequired={profile.level * 1000}
+            />
+          )}
+
+          {/* Personal Coaching Quest Card */}
+          {profile && (
+            <Card glowColor={bonusExpires ? "amber" : "violet"} className="border-slate-900 bg-[#111128]/60 p-5 space-y-4">
+              <CardHeader className="p-0 border-b border-slate-900/40 pb-3 flex flex-row items-center justify-between">
+                <CardTitle className="text-sm font-orbitron font-extrabold text-slate-100 uppercase tracking-widest flex items-center gap-2">
+                  <Activity className="h-4.5 w-4.5 text-violet-400" />
+                  <span>{language === "fr" ? "Coaching & Programme Hebdomadaire" : "Coaching & Weekly Program"}</span>
+                </CardTitle>
+                {bonusExpires && (
+                  <div className="flex items-center gap-1 text-[10px] text-orange-400 bg-orange-950/20 border border-orange-500/30 px-2.5 py-0.5 rounded-full font-orbitron font-bold animate-pulse shadow-[0_0_10px_rgba(245,158,11,0.3)]">
+                    <Flame className="h-3.5 w-3.5 text-orange-500 fill-orange-500/20" />
+                    <span>+{language === "fr" ? "BOOST ACTIF" : "BOOST ACTIVE"} ({remainingBonusTime})</span>
+                  </div>
+                )}
+              </CardHeader>
+              <CardContent className="p-0 pt-2">
+                {/* 1. Start / Info screen */}
+                {coachingStep === 0 && !activeCoachingProgram && (
+                  <div className="text-center p-6 space-y-4">
+                    <div className="h-12 w-12 rounded-full bg-violet-950/30 border border-violet-850/50 flex items-center justify-center mx-auto text-violet-400 text-xl">
+                      🎯
+                    </div>
+                    <div className="space-y-1">
+                      <h4 className="font-orbitron font-extrabold text-sm text-slate-200 uppercase tracking-widest">
+                        {language === "fr" ? "PROGRAMME D'ASSIDUITÉ ET COACHING" : "ASSIDUITY & COACHING PROGRAM"}
+                      </h4>
+                      <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
+                        {language === "fr"
+                          ? "Générez un plan d'entraînement structuré sur-mesure (type Runna). Complétez les séances hebdomadaires à 100% pour obtenir le boost de +50% XP et pièces d'Or ! Le plan s'adaptera automatiquement à votre rythme de semaine en semaine."
+                          : "Generate a custom structured training plan (Runna-style). Complete all weekly sessions at 100% to trigger a 72-hour +50% XP & Gold multiplier streak bonus! The plan will dynamically adapt week-to-week."}
+                      </p>
+                    </div>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => setCoachingStep(1)}
+                      className="font-orbitron font-bold text-xs py-2 px-6 uppercase mt-2 cursor-pointer"
+                    >
+                      🏁 {language === "fr" ? "Démarrer le Questionnaire" : "Start Questionnaire"}
+                    </Button>
+                  </div>
+                )}
+
+                {/* 2. Questionnaire Step 1: Sport */}
+                {coachingStep === 1 && (
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-orbitron font-extrabold text-slate-300 uppercase tracking-wider">
+                      {language === "fr" ? "1. Choisissez votre sport principal :" : "1. Choose your primary sport:"}
+                    </h4>
+                    <div className="grid grid-cols-3 gap-3">
+                      {(["Run", "Ride", "Walk"] as const).map((sport) => (
+                        <button
+                          key={sport}
+                          type="button"
+                          onClick={() => {
+                            setCoachingAnswers((prev) => ({ ...prev, sport }));
+                            setCoachingStep(2);
+                          }}
+                          className={`p-4 rounded-xl border text-center font-orbitron font-bold text-xs transition-all cursor-pointer ${
+                            coachingAnswers.sport === sport
+                              ? "bg-violet-950/30 border-violet-500 text-violet-400 shadow-[0_0_10px_rgba(139,92,246,0.2)]"
+                              : "bg-slate-950/40 border-slate-900 text-slate-400 hover:border-slate-800"
+                          }`}
+                        >
+                          <div className="text-2xl mb-1.5">{sport === "Run" ? "🏃" : sport === "Ride" ? "🚴" : "🚶"}</div>
+                          <div className="uppercase tracking-widest text-[10px]">
+                            {sport === "Run" ? (language === "fr" ? "Course" : "Run") : sport === "Ride" ? (language === "fr" ? "Vélo" : "Ride") : (language === "fr" ? "Marche" : "Walk")}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. Questionnaire Step 2: Plan Type */}
+                {coachingStep === 2 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setCoachingStep(1)}
+                        className="p-1 hover:bg-slate-900 rounded text-slate-400 cursor-pointer"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <h4 className="text-xs font-orbitron font-extrabold text-slate-300 uppercase tracking-wider">
+                        {language === "fr" ? "2. Quel plan d'entraînement ?" : "2. Choose your training plan:"}
+                      </h4>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        { id: "base", label: "Base Fitness", emoji: "⚡" },
+                        { id: "5k", label: "Objectif 5 km", emoji: "🏁" },
+                        { id: "10k", label: "Objectif 10 km", emoji: "🏆" },
+                        { id: "half", label: "Semi-Marathon", emoji: "🦁" },
+                        { id: "marathon", label: "Marathon", emoji: "👑" },
+                        { id: "trail", label: "Trail / Dénivelé", emoji: "⛰️" }
+                      ].map((plan) => (
+                        <button
+                          key={plan.id}
+                          type="button"
+                          onClick={() => {
+                            setCoachingAnswers((prev) => ({ ...prev, planType: plan.id as any }));
+                            setCoachingStep(3);
+                          }}
+                          className={`p-3 rounded-xl border text-center font-orbitron font-bold text-xs transition-all cursor-pointer ${
+                            coachingAnswers.planType === plan.id
+                              ? "bg-violet-950/30 border-violet-500 text-violet-400 shadow-[0_0_10px_rgba(139,92,246,0.2)]"
+                              : "bg-slate-950/40 border-slate-900 text-slate-400 hover:border-slate-800"
+                          }`}
+                        >
+                          <div className="text-xl mb-1">{plan.emoji}</div>
+                          <div className="uppercase tracking-wider text-[9px]">{plan.label}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. Questionnaire Step 3: Current Capacity */}
+                {coachingStep === 3 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setCoachingStep(2)}
+                        className="p-1 hover:bg-slate-900 rounded text-slate-400 cursor-pointer"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <h4 className="text-xs font-orbitron font-extrabold text-slate-300 uppercase tracking-wider">
+                        {language === "fr" ? "3. Combien pouvez-vous courir actuellement sans vous arrêter ?" : "3. What is your current running capacity?"}
+                      </h4>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {[
+                        { id: "none", label: "Débutant (Moins de 1km)", emoji: "🐢" },
+                        { id: "1km", label: "1 à 2 km", emoji: "🐰" },
+                        { id: "5km", label: "5 km", emoji: "🦊" },
+                        { id: "10km", label: "10 km", emoji: "🦌" },
+                        { id: "20km+", label: "Plus de 15 km", emoji: "🦅" }
+                      ].map((cap) => (
+                        <button
+                          key={cap.id}
+                          type="button"
+                          onClick={() => {
+                            setCoachingAnswers((prev) => ({ ...prev, currentCapacity: cap.id as any }));
+                            setCoachingStep(4);
+                          }}
+                          className={`p-3 rounded-xl border text-left font-orbitron font-bold text-xs transition-all cursor-pointer ${
+                            coachingAnswers.currentCapacity === cap.id
+                              ? "bg-violet-950/30 border-violet-500 text-violet-400 shadow-[0_0_10px_rgba(139,92,246,0.2)]"
+                              : "bg-slate-950/40 border-slate-900 text-slate-400 hover:border-slate-800"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">{cap.emoji}</span>
+                            <span className="uppercase tracking-wider text-[8px]">{cap.label}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 5. Questionnaire Step 4: Target Goal Type */}
+                {coachingStep === 4 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setCoachingStep(3)}
+                        className="p-1 hover:bg-slate-900 rounded text-slate-400 cursor-pointer"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <h4 className="text-xs font-orbitron font-extrabold text-slate-300 uppercase tracking-wider">
+                        {language === "fr" ? "4. Quel est votre but de performance ?" : "4. What is your goal type?"}
+                      </h4>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        { id: "finish", label: "Finir la distance", desc: "Se concentrer sur l'endurance pure", emoji: "🏁" },
+                        { id: "time_performance", label: "Performance Chrono", desc: "Viser des allures plus rapides", emoji: "⚡" }
+                      ].map((goal) => (
+                        <button
+                          key={goal.id}
+                          type="button"
+                          onClick={() => {
+                            setCoachingAnswers((prev) => ({ ...prev, targetGoal: goal.id as any }));
+                            setCoachingStep(5);
+                          }}
+                          className={`p-3 rounded-xl border text-center font-orbitron font-bold text-xs transition-all cursor-pointer ${
+                            coachingAnswers.targetGoal === goal.id
+                              ? "bg-violet-950/30 border-violet-500 text-violet-400 shadow-[0_0_10px_rgba(139,92,246,0.2)]"
+                              : "bg-slate-950/40 border-slate-900 text-slate-400 hover:border-slate-800"
+                          }`}
+                        >
+                          <div className="text-xl mb-1">{goal.emoji}</div>
+                          <div className="uppercase tracking-widest text-[9px] font-black">{goal.label}</div>
+                          <div className="text-[8px] text-slate-500 font-normal mt-0.5">{goal.desc}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 6. Questionnaire Step 5: Frequency */}
+                {coachingStep === 5 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setCoachingStep(4)}
+                        className="p-1 hover:bg-slate-900 rounded text-slate-400 cursor-pointer"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <h4 className="text-xs font-orbitron font-extrabold text-slate-300 uppercase tracking-wider">
+                        {language === "fr" ? "5. Combien de séances par semaine ?" : "5. How many workouts per week?"}
+                      </h4>
+                    </div>
+                    <div className="grid grid-cols-4 gap-3">
+                      {([2, 3, 4, 5] as const).map((freq) => (
+                        <button
+                          key={freq}
+                          type="button"
+                          onClick={() => {
+                            setCoachingAnswers((prev) => ({ ...prev, frequency: freq }));
+                            setCoachingStep(6);
+                          }}
+                          className={`p-3 rounded-xl border text-center font-orbitron font-black text-sm transition-all cursor-pointer ${
+                            coachingAnswers.frequency === freq
+                              ? "bg-violet-950/30 border-violet-500 text-violet-400 shadow-[0_0_10px_rgba(139,92,246,0.2)]"
+                              : "bg-slate-950/40 border-slate-900 text-slate-400 hover:border-slate-800"
+                          }`}
+                        >
+                          {freq}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 7. Questionnaire Step 6: Weeks count */}
+                {coachingStep === 6 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setCoachingStep(5)}
+                        className="p-1 hover:bg-slate-900 rounded text-slate-400 cursor-pointer"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <h4 className="text-xs font-orbitron font-extrabold text-slate-300 uppercase tracking-wider">
+                        {language === "fr" ? "6. Quelle durée de programme ?" : "6. Choose plan duration:"}
+                      </h4>
+                    </div>
+                    <div className="flex flex-col gap-4">
+                      <div className="grid grid-cols-3 gap-3">
+                        {([4, 8, 12] as const).map((wCount) => (
+                          <button
+                            key={wCount}
+                            type="button"
+                            onClick={() => setCoachingAnswers((prev) => ({ ...prev, weeksCount: wCount }))}
+                            className={`p-4 rounded-xl border text-center font-orbitron font-bold text-xs transition-all cursor-pointer ${
+                              coachingAnswers.weeksCount === wCount
+                                ? "bg-violet-950/30 border-violet-500 text-violet-400 shadow-[0_0_10px_rgba(139,92,246,0.2)]"
+                                : "bg-slate-950/40 border-slate-900 text-slate-400 hover:border-slate-800"
+                            }`}
+                          >
+                            {wCount} {language === "fr" ? "Semaines" : "Weeks"}
+                          </button>
+                        ))}
+                      </div>
+
+                      {coachingAnswers.weeksCount && (
+                        <Button
+                          variant="accent"
+                          onClick={handleSubmitQuestionnaire}
+                          className="w-full py-2.5 font-orbitron font-extrabold text-xs uppercase mt-2 cursor-pointer"
+                        >
+                          🚀 {language === "fr" ? "GÉNÉRER LE PLAN AVANCÉ" : "GENERATE ADVANCED PLAN"}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* 8. Active coaching program tracking */}
+                {activeCoachingProgram && (
+                  <div className="space-y-4">
+                    {/* Header Details */}
+                    <div className="flex items-center justify-between border-b border-slate-900 pb-2 flex-wrap gap-2">
+                      <div>
+                        <h5 className="font-orbitron font-extrabold text-xs text-slate-200 uppercase tracking-widest">
+                          {activeCoachingProgram.name}
+                        </h5>
+                         <div className="flex items-center gap-2 mt-1 flex-wrap text-[9px] font-orbitron font-bold uppercase tracking-wider">
+                          <span className="text-slate-550">🎯 {language === "fr" ? "Allures :" : "Paces:"}</span>
+                          <span className="text-cyan-400">Easy: {activeCoachingProgram.targetPaces?.easy || "N/A"}</span>
+                          <span className="text-amber-500">Tempo: {activeCoachingProgram.targetPaces?.tempo || "N/A"}</span>
+                          <span className="text-violet-400">Speed: {activeCoachingProgram.targetPaces?.intervals || "N/A"}</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleResetCoaching}
+                        className="text-[9px] font-orbitron font-bold text-rose-450 hover:text-rose-350 transition uppercase cursor-pointer"
+                      >
+                        🗑️ {language === "fr" ? "Réinitialiser" : "Reset Plan"}
+                      </button>
+                    </div>
+
+                    {/* Weeks selector */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-slate-900/40 max-w-full">
+                      {activeCoachingProgram.weeks.map((week, idx) => {
+                        const isCurrent = idx === activeCoachingProgram.currentWeekIndex;
+                        const isActiveTab = activeWeekTab === week.weekNumber;
+                        
+                        let weekBadge = "";
+                        if (week.status === 'completed') weekBadge = "🏆";
+                        else if (week.status === 'partial') weekBadge = "⚡";
+                        else if (week.status === 'failed') weekBadge = "⚠️";
+
+                        return (
+                          <button
+                            key={week.weekNumber}
+                            type="button"
+                            onClick={() => setActiveWeekTab(week.weekNumber)}
+                            className={`px-3 py-1.5 rounded-lg border font-orbitron font-bold text-[9px] uppercase tracking-wider shrink-0 transition cursor-pointer ${
+                              isActiveTab
+                                ? "bg-violet-950/30 border-violet-500 text-violet-400 shadow-[0_0_8px_rgba(139,92,246,0.15)]"
+                                : isCurrent
+                                ? "bg-slate-950 border-cyan-500/50 text-cyan-400"
+                                : "bg-slate-950/50 border-slate-900 text-slate-550 hover:text-slate-400"
+                            }`}
+                          >
+                            S{week.weekNumber} {weekBadge}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Display selected week workouts */}
+                    {(() => {
+                      const selectedWeek = activeCoachingProgram.weeks.find((w) => w.weekNumber === activeWeekTab);
+                      if (!selectedWeek) return null;
+
+                      const isCurrentWeek = (activeWeekTab - 1) === activeCoachingProgram.currentWeekIndex;
+                      const completedCount = selectedWeek.workouts.filter((w) => w.completed).length;
+                      const totalCount = selectedWeek.workouts.length;
+                      const compPct = totalCount > 0 ? (completedCount / totalCount) : 0;
+
+                      return (
+                        <div className="space-y-4">
+                          {selectedWeek.adaptationReport && (
+                            <div className="p-2.5 bg-slate-950/30 border border-slate-900 rounded-lg text-[10px] text-slate-400 font-semibold leading-relaxed">
+                              📢 <strong>{language === "fr" ? "Adaptation :" : "Adaptation:"}</strong> {selectedWeek.adaptationReport}
+                            </div>
+                          )}
+
+                          <div className="space-y-3">
+                            {selectedWeek.workouts.map((w) => (
+                              <div
+                                key={w.id}
+                                className={`p-3.5 rounded-xl border transition-all ${
+                                  w.completed
+                                    ? "bg-emerald-950/10 border-emerald-900/30 shadow-[0_0_8px_rgba(16,185,129,0.05)]"
+                                    : isCurrentWeek
+                                    ? "bg-slate-950/40 border-slate-900/80 hover:border-slate-800"
+                                    : "bg-slate-950/20 border-slate-950 opacity-60"
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-3 flex-wrap sm:flex-nowrap">
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="font-orbitron font-extrabold text-xs text-slate-100 uppercase tracking-widest">
+                                        {w.name}
+                                      </span>
+                                      <Badge
+                                        variant={
+                                          w.type === "Intervals" ? "primary" : w.type === "Tempo" ? "accent" : "secondary"
+                                        }
+                                        className="scale-90"
+                                      >
+                                        {w.type}
+                                      </Badge>
+                                    </div>
+                                    <p className="text-[10px] text-slate-500">{w.description}</p>
+                                  </div>
+
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    {w.targetDistance && (
+                                      <div className="text-[10px] bg-slate-950 border border-slate-900 font-orbitron font-bold text-slate-350 px-2 py-0.5 rounded uppercase">
+                                        {w.targetDistance} km
+                                      </div>
+                                    )}
+                                    {w.targetDuration && (
+                                      <div className="text-[10px] bg-slate-950 border border-slate-900 font-orbitron font-bold text-slate-350 px-2 py-0.5 rounded uppercase">
+                                        {w.targetDuration} min
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Segments structures */}
+                                <div className="mt-3 bg-slate-950/50 rounded-lg p-2.5 border border-slate-900/50 space-y-1.5">
+                                  {w.structure.map((seg, sidx) => (
+                                    <div key={sidx} className="flex items-start gap-1.5 text-[10px] text-slate-400 font-medium">
+                                      <span className="text-violet-400 select-none">•</span>
+                                      <span>{seg}</span>
+                                    </div>
+                                  ))}
+                                </div>
+
+                                {/* Association Controls */}
+                                <div className="mt-3 pt-2.5 border-t border-slate-900/40 flex items-center justify-between flex-wrap gap-2">
+                                  <div className="flex items-center gap-1.5 text-[10px] font-orbitron font-bold">
+                                    <span className="text-slate-550">{language === "fr" ? "Gain :" : "Rewards:"}</span>
+                                    <span className="text-violet-400">+{w.xpReward} XP</span>
+                                    <span className="text-amber-500">+{w.goldReward} Or</span>
+                                  </div>
+
+                                  {w.completed ? (
+                                    <div className="flex items-center gap-1.5 text-[10px] font-orbitron font-bold text-emerald-400">
+                                      <span>✓ {language === "fr" ? "Complété" : "Completed"}</span>
+                                      {w.paceAccuracy && (
+                                        <span className="bg-emerald-950/30 border border-emerald-900/40 px-1.5 py-0.5 rounded uppercase tracking-wider text-[8px]">
+                                          Acc: {w.paceAccuracy}%
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : isCurrentWeek ? (
+                                    <Button
+                                      variant="primary"
+                                      size="sm"
+                                      className="py-1 px-3 text-[9px] font-orbitron font-bold h-7 uppercase cursor-pointer"
+                                      onClick={() => {
+                                        setWorkoutToAssociate(w);
+                                        setShowAssociateModal(true);
+                                      }}
+                                    >
+                                      🔗 {language === "fr" ? "Associer Strava" : "Link Strava"}
+                                    </Button>
+                                  ) : (
+                                    <span className="text-[10px] font-orbitron font-bold text-slate-650 uppercase">
+                                      🔒 {language === "fr" ? "Semaine inactive" : "Inactive week"}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Close week controls */}
+                          {isCurrentWeek && (
+                            <div className="pt-4 border-t border-slate-900/50 flex flex-col gap-3">
+                              <div className="flex items-center justify-between text-xs font-orbitron font-bold text-slate-400">
+                                <span>{language === "fr" ? "Progression Semaine :" : "Weekly Progress:"}</span>
+                                <span>
+                                  {completedCount} / {totalCount} {language === "fr" ? "Séances" : "Workouts"} ({Math.round(compPct * 100)}%)
+                                </span>
+                              </div>
+                              <div className="h-2 w-full bg-slate-950 border border-slate-900 rounded-full overflow-hidden p-0.5">
+                                <div
+                                  style={{ width: `${compPct * 100}%` }}
+                                  className="h-full bg-gradient-to-r from-violet-600 to-emerald-400 rounded-full"
+                                />
+                              </div>
+
+                              {compPct === 1.0 && !activeCoachingProgram.claimed && (
+                                <Button
+                                  variant="accent"
+                                  onClick={handleClaimCoachingBonus}
+                                  className="w-full py-3 font-orbitron font-black text-xs uppercase animate-pulse shadow-[0_0_15px_rgba(245,158,11,0.5)] border border-amber-500 cursor-pointer"
+                                >
+                                  🔥 {language === "fr" ? "Réclamer le Boost d'Assiduité (72h)" : "Claim Assiduity Streak Boost (72h)"}
+                                </Button>
+                              )}
+
+                              {compPct === 1.0 && activeCoachingProgram.claimed && (
+                                <div className="p-3 bg-emerald-950/20 border border-emerald-900/30 rounded-lg text-center text-xs text-emerald-400 font-orbitron font-bold flex items-center justify-center gap-1.5 shadow-[0_0_10px_rgba(16,185,129,0.1)]">
+                                  <Check className="h-4 w-4" />
+                                  <span>{language === "fr" ? "Boost d'assiduité actif !" : "Streak boost active!"}</span>
+                                </div>
+                              )}
+
+                              <Button
+                                variant="outline"
+                                onClick={handleCloseWeek}
+                                className="w-full py-2.5 font-orbitron font-bold text-xs uppercase border-slate-850 hover:bg-slate-950 cursor-pointer"
+                              >
+                                🏁 {language === "fr" ? "Clôturer la Semaine active" : "Close active week"}
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Mastery Levels Card */}
+          {profile && (
+            <Card glowColor="violet" className="border-slate-900 bg-[#111128]/60 p-5 space-y-4">
+              <CardHeader className="p-0 border-b border-slate-900/40 pb-3 flex flex-row items-center justify-between">
+                <CardTitle className="text-sm font-orbitron font-extrabold text-slate-100 uppercase tracking-widest flex items-center gap-2">
+                  <Award className="h-4.5 w-4.5 text-violet-400" />
+                  <span>{language === "fr" ? "Maîtrise des Disciplines" : "Discipline Masteries"}</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0 space-y-5 pt-3">
+                {/* 1. Run Mastery */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs font-orbitron font-bold">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">🏃</span>
+                      <span className="text-slate-200">{language === "fr" ? "Course à pied" : "Running"}</span>
+                      <Badge variant="neutral" className="text-[8px] px-1.5 py-0 border-violet-500/20 text-violet-400 font-extrabold">
+                        {runMastery.level >= 10 ? (language === "fr" ? "MAÎTRE" : "MASTER") : runMastery.level >= 5 ? (language === "fr" ? "VÉTÉRAN" : "VETERAN") : (language === "fr" ? "NOVICE" : "NOVICE")}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-1.5 font-orbitron">
+                      <span className="text-[10px] bg-slate-950 border border-slate-900 text-slate-300 px-1.5 py-0.5 rounded font-extrabold uppercase">
+                        Niv. {runMastery.level}
+                      </span>
+                      <span className="text-[10px] text-violet-400 font-black">
+                        {Math.round(runMastery.currentXP)}
+                      </span>
+                      <span className="text-[9px] text-slate-550 font-medium">
+                        / {runMastery.xpRequired} XP
+                      </span>
+                    </div>
+                  </div>
+                  <div className="w-full h-2.5 rounded bg-slate-950 border border-slate-900/60 overflow-hidden relative">
+                    <div
+                      className="h-full bg-violet-600 rounded shadow-[0_0_10px_rgba(139,92,246,0.5)] transition-all duration-500"
+                      style={{ width: `${(runMastery.currentXP / runMastery.xpRequired) * 100}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* 2. Ride Mastery */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs font-orbitron font-bold">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">🚴</span>
+                      <span className="text-slate-200">{language === "fr" ? "Cyclisme" : "Cycling"}</span>
+                      <Badge variant="neutral" className="text-[8px] px-1.5 py-0 border-amber-500/20 text-amber-500 font-extrabold">
+                        {rideMastery.level >= 10 ? (language === "fr" ? "MAÎTRE" : "MASTER") : rideMastery.level >= 5 ? (language === "fr" ? "VÉTÉRAN" : "VETERAN") : (language === "fr" ? "NOVICE" : "NOVICE")}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-1.5 font-orbitron">
+                      <span className="text-[10px] bg-slate-950 border border-slate-900 text-slate-300 px-1.5 py-0.5 rounded font-extrabold uppercase">
+                        Niv. {rideMastery.level}
+                      </span>
+                      <span className="text-[10px] text-amber-550 font-black">
+                        {Math.round(rideMastery.currentXP)}
+                      </span>
+                      <span className="text-[9px] text-slate-550 font-medium">
+                        / {rideMastery.xpRequired} XP
+                      </span>
+                    </div>
+                  </div>
+                  <div className="w-full h-2.5 rounded bg-slate-950 border border-slate-900/60 overflow-hidden relative">
+                    <div
+                      className="h-full bg-amber-500 rounded shadow-[0_0_10px_rgba(245,158,11,0.5)] transition-all duration-500"
+                      style={{ width: `${(rideMastery.currentXP / rideMastery.xpRequired) * 100}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* 3. Walk Mastery */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs font-orbitron font-bold">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">🚶</span>
+                      <span className="text-slate-200">{language === "fr" ? "Marche & Rando" : "Walking & Hiking"}</span>
+                      <Badge variant="neutral" className="text-[8px] px-1.5 py-0 border-cyan-500/20 text-cyan-400 font-extrabold">
+                        {walkMastery.level >= 10 ? (language === "fr" ? "MAÎTRE" : "MASTER") : walkMastery.level >= 5 ? (language === "fr" ? "VÉTÉRAN" : "VETERAN") : (language === "fr" ? "NOVICE" : "NOVICE")}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-1.5 font-orbitron">
+                      <span className="text-[10px] bg-slate-950 border border-slate-900 text-slate-300 px-1.5 py-0.5 rounded font-extrabold uppercase">
+                        Niv. {walkMastery.level}
+                      </span>
+                      <span className="text-[10px] text-cyan-450 font-black">
+                        {Math.round(walkMastery.currentXP)}
+                      </span>
+                      <span className="text-[9px] text-slate-550 font-medium">
+                        / {walkMastery.xpRequired} XP
+                      </span>
+                    </div>
+                  </div>
+                  <div className="w-full h-2.5 rounded bg-slate-950 border border-slate-900/60 overflow-hidden relative">
+                    <div
+                      className="h-full bg-cyan-500 rounded shadow-[0_0_10px_rgba(6,182,212,0.5)] transition-all duration-500"
+                      style={{ width: `${(walkMastery.currentXP / walkMastery.xpRequired) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Detailed Statistics */}
+          <Card glowColor="none" className="border-slate-900 bg-[#111128]/60 p-6">
+            <CardHeader className="mb-6">
+              <CardTitle className="flex items-center gap-2">
+                <Award className="h-5 w-5 text-violet-500" />
+                <span>{t("heroStatistics")}</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                {/* Stat item */}
+                <div className="p-4 bg-slate-950/40 border border-slate-900/60 rounded-xl space-y-1">
+                  <span className="block text-[10px] font-orbitron font-bold text-slate-550 tracking-wider uppercase">
+                    {t("questsCompleted")}
+                  </span>
+                  <span className="block font-orbitron font-black text-xl text-slate-200">
+                    {totalQuests}
+                  </span>
+                </div>
+
+                <div className="p-4 bg-slate-950/40 border border-slate-900/60 rounded-xl space-y-1">
+                  <span className="block text-[10px] font-orbitron font-bold text-slate-555 tracking-wider uppercase">
+                    {t("totalDistance")}
+                  </span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="block font-orbitron font-black text-xl text-slate-200">
+                      {totalDist.toFixed(1)}
+                    </span>
+                    <span className="text-xs text-slate-500 font-bold uppercase font-orbitron">KM</span>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-950/40 border border-slate-900/60 rounded-xl space-y-1">
+                  <span className="block text-[10px] font-orbitron font-bold text-slate-555 tracking-wider uppercase">
+                    {t("totalElevation")}
+                  </span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="block font-orbitron font-black text-xl text-slate-200">
+                      {totalElev}
+                    </span>
+                    <span className="text-xs text-slate-500 font-bold uppercase font-orbitron">M</span>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-950/40 border border-slate-900/60 rounded-xl space-y-1">
+                  <span className="block text-[10px] font-orbitron font-bold text-slate-555 tracking-wider uppercase">
+                    {t("avgHeartRate")}
+                  </span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="block font-orbitron font-black text-xl text-slate-200">
+                      {avgHR > 0 ? Math.round(avgHR) : "N/A"}
+                    </span>
+                    {avgHR > 0 && <span className="text-xs text-slate-500 font-bold uppercase font-orbitron">BPM</span>}
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-950/40 border border-slate-900/60 rounded-xl space-y-1">
+                  <span className="block text-[10px] font-orbitron font-bold text-slate-555 tracking-wider uppercase">
+                    {t("xpPerQuest")}
+                  </span>
+                  <span className="block font-orbitron font-black text-xl text-slate-200">
+                    {totalQuests > 0 ? Math.round(profile!.xp / totalQuests) : 0}
+                  </span>
+                </div>
+
+                <div className="p-4 bg-slate-950/40 border border-slate-900/60 rounded-xl space-y-1">
+                  <span className="block text-[10px] font-orbitron font-bold text-slate-555 tracking-wider uppercase">
+                    {t("goldPerQuest")}
+                  </span>
+                  <span className="block font-orbitron font-black text-xl text-slate-200">
+                    {totalQuests > 0 ? Math.round((profile!.gold - 100) / totalQuests) : 0}
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Edit Profile Modal */}
+      {isEditOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card
+            glowColor="violet"
+            className="w-full max-w-lg bg-[#111128] border-slate-800 shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh]"
+          >
+            <div className="flex items-center justify-between p-5 border-b border-slate-900">
+              <h3 className="font-orbitron font-extrabold text-sm tracking-widest text-slate-100 uppercase flex items-center gap-2">
+                <User className="h-4 w-4 text-violet-500" />
+                <span>{language === "fr" ? "MODIFIER LE HÉROS" : "EDIT HERO PROFILE"}</span>
+              </h3>
+              <button
+                onClick={() => setIsEditOpen(false)}
+                className="p-1 rounded-lg hover:bg-slate-900 text-slate-400 hover:text-slate-250 transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveProfile} className="p-6 space-y-6 overflow-y-auto flex-1">
+              {/* Strava Quick Import */}
+              {profile?.strava_athlete_id && (
+                <div className="p-4 bg-cyan-950/10 border border-cyan-900/30 rounded-xl flex items-center justify-between">
+                  <div className="space-y-1">
+                    <span className="block font-orbitron font-bold text-[10px] text-cyan-400 tracking-wider uppercase">
+                      {language === "fr" ? "Synchronisation Strava" : "Strava Sync"}
+                    </span>
+                    <span className="block text-xs text-slate-400">
+                      {language === "fr" 
+                        ? "Remplir automatiquement via vos données Strava." 
+                        : "Autofill profile details from your Strava account."}
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="shrink-0 flex items-center gap-1.5"
+                    onClick={handleImportStravaProfile}
+                    loading={importingStrava}
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    <span>{language === "fr" ? "Importer" : "Import"}</span>
+                  </Button>
+                </div>
+              )}
+
+              {/* Character Fields */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block font-orbitron text-[10px] font-bold text-slate-400 tracking-widest uppercase">
+                    {language === "fr" ? "Pseudo du Héros" : "Hero Pseudo"}
+                  </label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-3 h-4 w-4 text-slate-650" />
+                    <input
+                      type="text"
+                      required
+                      value={editUsername}
+                      onChange={(e) => setEditUsername(e.target.value)}
+                      placeholder="e.g. ShadowRunner"
+                      className="w-full bg-slate-950 border border-slate-900 rounded-lg py-2.5 pl-10 pr-4 text-sm text-slate-200 placeholder-slate-700 focus:outline-none focus:border-violet-600 transition"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block font-orbitron text-[10px] font-bold text-slate-400 tracking-widest uppercase">
+                    {language === "fr" ? "Ville" : "City"}
+                  </label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-3 h-4 w-4 text-slate-650" />
+                    <input
+                      type="text"
+                      value={editCity}
+                      onChange={(e) => {
+                        setEditCity(e.target.value);
+                        setShowSuggestions(true);
+                      }}
+                      onFocus={() => setShowSuggestions(true)}
+                      onBlur={() => {
+                        // Delay closing suggestions so click handlers can run first
+                        setTimeout(() => setShowSuggestions(false), 200);
+                      }}
+                      placeholder="e.g. Paris"
+                      className="w-full bg-slate-950 border border-slate-900 rounded-lg py-2.5 pl-10 pr-4 text-sm text-slate-200 placeholder-slate-700 focus:outline-none focus:border-violet-600 transition"
+                    />
+                    
+                    {showSuggestions && (apiLoading || apiSuggestions.length > 0) && (
+                      <div className="absolute left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-[#111128] border border-slate-800 rounded-lg shadow-xl z-50 divide-y divide-slate-950/40">
+                        {apiLoading ? (
+                          <div className="p-3 text-center text-xs text-slate-500 font-orbitron uppercase tracking-widest flex items-center justify-center gap-2">
+                            <RefreshCw className="h-3 w-3 animate-spin text-violet-500" />
+                            <span>Recherche...</span>
+                          </div>
+                        ) : (
+                          apiSuggestions.map((city, idx) => (
+                            <button
+                              key={`${city.name}-${city.department_id}-${idx}`}
+                              type="button"
+                              className="w-full text-left px-4 py-2.5 hover:bg-slate-900/60 text-xs font-orbitron font-semibold text-slate-250 transition flex items-center justify-between"
+                              onClick={() => {
+                                setEditCity(city.name);
+                                setShowSuggestions(false);
+                              }}
+                            >
+                              <span className="text-slate-200">{city.name}</span>
+                              <span className="text-[9px] bg-slate-900 text-slate-500 px-1.5 py-0.5 rounded uppercase">
+                                Dep {city.department_id}
+                              </span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block font-orbitron text-[10px] font-bold text-slate-400 tracking-widest uppercase">
+                    {language === "fr" ? "Âge" : "Age"}
+                  </label>
+                  <input
+                    type="number"
+                    value={editAge}
+                    onChange={(e) => setEditAge(e.target.value)}
+                    placeholder="e.g. 28"
+                    min="1"
+                    max="120"
+                    className="w-full bg-slate-950 border border-slate-900 rounded-lg py-2.5 px-4 text-sm text-slate-200 placeholder-slate-700 focus:outline-none focus:border-violet-600 transition"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block font-orbitron text-[10px] font-bold text-slate-400 tracking-widest uppercase">
+                    {language === "fr" ? "URL de l'Avatar" : "Avatar Image URL"}
+                  </label>
+                  <div className="relative">
+                    <ImageIcon className="absolute left-3 top-3 h-4 w-4 text-slate-650" />
+                    <input
+                      type="text"
+                      value={editAvatar}
+                      onChange={(e) => setEditAvatar(e.target.value)}
+                      placeholder="https://..."
+                      className="w-full bg-slate-950 border border-slate-900 rounded-lg py-2.5 pl-10 pr-4 text-sm text-slate-250 placeholder-slate-700 focus:outline-none focus:border-violet-600 transition"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Preset Avatars Selection */}
+              <div className="space-y-3">
+                <label className="block font-orbitron text-[10px] font-bold text-slate-400 tracking-widest uppercase">
+                  {language === "fr" ? "Choisir un avatar RPG prédéfini" : "Choose an RPG Preset Avatar"}
+                </label>
+                <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+                  {PRESET_AVATARS.map((avatar) => {
+                    const isSelected = editAvatar === avatar.url;
+                    return (
+                      <button
+                        key={avatar.name}
+                        type="button"
+                        className={`relative rounded-xl border p-1 bg-slate-950/60 overflow-hidden group hover:border-violet-500/50 transition duration-300 ${
+                          isSelected ? "border-violet-500 ring-2 ring-violet-500/20" : "border-slate-900"
+                        }`}
+                        onClick={() => setEditAvatar(avatar.url)}
+                      >
+                        <img
+                          src={avatar.url}
+                          alt={avatar.name}
+                          className="w-full h-12 md:h-14 object-cover rounded-lg group-hover:scale-105 transition"
+                        />
+                        <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-[8px] font-orbitron font-bold text-violet-400 tracking-wider text-center p-0.5 uppercase transition">
+                          {avatar.name.split(" ")[0]}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-900/60">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="px-4 border-slate-800 text-slate-400 hover:text-slate-200"
+                  onClick={() => setIsEditOpen(false)}
+                >
+                  {language === "fr" ? "Annuler" : "Cancel"}
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  className="px-5 flex items-center gap-1.5"
+                  loading={saving}
+                >
+                  <Save className="h-4 w-4" />
+                  <span>{language === "fr" ? "Enregistrer" : "Save Changes"}</span>
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {/* Associate Workout Modal */}
+      {showAssociateModal && workoutToAssociate && coachingProgram && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card
+            glowColor="cyan"
+            className="w-full max-w-lg bg-[#111128]/95 border-slate-800 shadow-2xl relative overflow-hidden flex flex-col max-h-[80vh]"
+          >
+            <div className="flex items-center justify-between p-5 border-b border-slate-900">
+              <h3 className="font-orbitron font-extrabold text-sm tracking-widest text-slate-100 uppercase flex items-center gap-2">
+                <Activity className="h-4.5 w-4.5 text-cyan-400" />
+                <span>
+                  {language === "fr" ? "ASSOCIER UNE ACTIVITÉ" : "ASSOCIATE ACTIVITY"}
+                </span>
+              </h3>
+              <button
+                onClick={() => {
+                  setShowAssociateModal(false);
+                  setWorkoutToAssociate(null);
+                }}
+                className="p-1 rounded-lg hover:bg-slate-900 text-slate-400 hover:text-slate-250 transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto flex-1 space-y-4">
+              <div className="p-4 bg-slate-950/60 rounded-xl border border-slate-900 space-y-2">
+                <span className="block text-[10px] font-orbitron font-bold text-violet-400 uppercase tracking-widest">
+                  {language === "fr" ? "Séance Programmée :" : "Planned Workout:"}
+                </span>
+                <div className="flex items-center justify-between">
+                  <span className="font-orbitron font-extrabold text-xs text-slate-200">
+                    {workoutToAssociate.name}
+                  </span>
+                  <div className="text-[10px] bg-slate-900 border border-slate-800 font-orbitron font-bold text-slate-400 px-2.5 py-0.5 rounded uppercase">
+                    {workoutToAssociate.targetDistance
+                      ? `${workoutToAssociate.targetDistance} km`
+                      : `${workoutToAssociate.targetDuration} min`}
+                  </div>
+                </div>
+                <div className="text-[10px] text-slate-500 font-semibold font-orbitron uppercase flex items-center gap-2">
+                  <span>🎯 {language === "fr" ? "Allure cible :" : "Target pace:"} {workoutToAssociate.targetPace}</span>
+                  <span>•</span>
+                  <span>💎 +{workoutToAssociate.xpReward} XP</span>
+                  <span>•</span>
+                  <span>🪙 +{workoutToAssociate.goldReward} Or</span>
+                </div>
+              </div>
+
+              <div className="space-y-2.5">
+                <h4 className="text-[10px] font-orbitron font-bold text-slate-400 uppercase tracking-widest">
+                  {language === "fr" ? "Sélectionnez votre séance Strava sync :" : "Select your synchronized Strava workout:"}
+                </h4>
+
+                {(() => {
+                  const alreadyAssociatedIds = new Set<string>();
+                  coachingProgram.weeks.forEach(week => {
+                    week.workouts.forEach(w => {
+                      if (w.associatedWorkoutId) {
+                        alreadyAssociatedIds.add(w.associatedWorkoutId);
+                      }
+                    });
+                  });
+
+                  const eligible = workouts.filter(w => {
+                    if (alreadyAssociatedIds.has(w.id)) return false;
+                    const sport = coachingProgram.sport;
+                    if (sport === "Run") return w.activity_type === "Run";
+                    if (sport === "Ride") return w.activity_type === "Ride";
+                    if (sport === "Walk") return w.activity_type === "Walk" || w.activity_type === "Hike";
+                    return false;
+                  });
+
+                  if (eligible.length === 0) {
+                    return (
+                      <div className="text-center p-8 bg-slate-950/20 border border-slate-900/40 rounded-xl space-y-2">
+                        <span className="text-2xl block">🚲</span>
+                        <p className="text-xs text-slate-500 leading-relaxed max-w-xs mx-auto">
+                          {language === "fr"
+                            ? `Aucune séance de type "${coachingProgram.sport}" disponible pour l'association. Synchronisez d'abord vos activités Strava depuis votre tableau de bord.`
+                            : `No logged workouts of type "${coachingProgram.sport}" available. Sync your Strava activities from the dashboard first.`}
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                      {eligible.map((logged) => {
+                        const date = new Date(logged.start_date).toLocaleDateString(
+                          language === "fr" ? "fr-FR" : "en-US",
+                          { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }
+                        );
+
+                        return (
+                          <div
+                            key={logged.id}
+                            className="p-3 bg-slate-950/40 border border-slate-900 rounded-xl hover:border-cyan-500/35 transition flex items-center justify-between gap-3"
+                          >
+                            <div className="space-y-0.5">
+                              <span className="block font-orbitron font-extrabold text-[11px] text-slate-200 uppercase tracking-wide">
+                                {logged.name}
+                              </span>
+                              <div className="flex items-center gap-2 text-[9px] text-slate-550 font-semibold font-orbitron">
+                                <span>📅 {date}</span>
+                                <span>•</span>
+                                <span className="text-cyan-400">{logged.distance} km</span>
+                                {logged.elevation_gain > 0 && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="text-rose-400">+{logged.elevation_gain}m</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              className="text-[9px] px-3 font-orbitron font-bold h-7 uppercase"
+                              onClick={() => handleAssociateWorkout(workoutToAssociate.id, logged.id)}
+                            >
+                              {language === "fr" ? "Choisir" : "Choose"}
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-950/20 border-t border-slate-900/60 flex items-center justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="px-4 border-slate-800 text-slate-400 hover:text-slate-255"
+                onClick={() => {
+                  setShowAssociateModal(false);
+                  setWorkoutToAssociate(null);
+                }}
+              >
+                {language === "fr" ? "Annuler" : "Cancel"}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+

@@ -1,65 +1,215 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import React from "react";
+import Link from "next/link";
+import { Shield, Zap, Sun, Moon, Swords, Trophy, Map, ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { useLanguage } from "@/components/layout/language-provider";
+import { LanguageToggle } from "@/components/layout/language-toggle";
+
+export default function LandingPage() {
+  const { t } = useLanguage();
+
+  const factions = [
+    {
+      name: t("shadowRunners"),
+      icon: Zap,
+      description: t("shadowDesc"),
+      color: "violet" as const,
+      colorClass: "text-violet-400 border-violet-950/40 bg-violet-950/5",
+      iconClass: "text-violet-400",
+    },
+    {
+      name: t("solarCyclists"),
+      icon: Sun,
+      description: t("solarDesc"),
+      color: "amber" as const,
+      colorClass: "text-amber-400 border-amber-950/40 bg-amber-950/5",
+      iconClass: "text-amber-400",
+    },
+    {
+      name: t("lunarWalkers"),
+      icon: Moon,
+      description: t("lunarDesc"),
+      color: "cyan" as const,
+      colorClass: "text-cyan-400 border-cyan-950/40 bg-cyan-950/5",
+      iconClass: "text-cyan-400",
+    },
+  ];
+
+  const highlights = [
+    {
+      icon: Swords,
+      title: t("rpgConversion"),
+      text: t("rpgConversionDesc"),
+    },
+    {
+      icon: Map,
+      title: t("territoryControl"),
+      text: t("territoryControlDesc"),
+    },
+    {
+      icon: Trophy,
+      title: t("weeklyLeagues"),
+      text: t("weeklyLeaguesDesc"),
+    },
+  ];
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="relative min-h-screen bg-background-dark text-slate-200 flex flex-col justify-between overflow-hidden">
+      {/* Decorative Grid Overlay */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(26,26,62,0.15),transparent_60%)] pointer-events-none" />
+
+      {/* Navigation Header */}
+      <header className="w-full max-w-7xl mx-auto px-6 py-5 flex items-center justify-between z-10">
+        <div className="flex items-center gap-2 select-none">
+          <Shield className="h-8 w-8 text-violet-500 fill-violet-950/30 filter drop-shadow-[0_0_5px_rgba(139,92,246,0.6)]" />
+          <span className="font-orbitron font-extrabold text-sm tracking-widest bg-gradient-to-r from-slate-100 to-slate-350 bg-clip-text text-transparent">
+            {t("title")}
+          </span>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <div className="flex items-center gap-4">
+          <LanguageToggle />
+          <Link href="/login">
+            <Button variant="outline" size="sm">
+              {t("enterRealm")}
+            </Button>
+          </Link>
+        </div>
+      </header>
+
+      {/* Hero Section */}
+      <main className="flex-1 w-full max-w-7xl mx-auto px-6 py-12 md:py-20 flex flex-col items-center justify-center text-center gap-12 z-10">
+        <div className="space-y-6 max-w-3xl">
+          <Badge variant="primary" className="px-3.5 py-1 text-[10px] tracking-widest select-none">
+            Gamified Strava Integration
+          </Badge>
+          
+          <h1 className="font-orbitron font-black text-4xl sm:text-6xl md:text-7xl tracking-wider leading-none text-slate-100 uppercase select-none">
+            THE FITNESS <br />
+            <span className="bg-gradient-to-r from-violet-500 via-purple-500 to-cyan-400 bg-clip-text text-transparent filter drop-shadow-[0_0_20px_rgba(139,92,246,0.35)]">
+              REALM
+            </span>
+          </h1>
+
+          <p className="max-w-xl mx-auto text-sm sm:text-base md:text-lg text-slate-400 font-medium leading-relaxed">
+            {t("landingSubtitle")} {t("landingDesc")}
+          </p>
+
+          <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link href="/login">
+              <Button size="lg" variant="primary" icon={<ArrowRight className="h-4 w-4" />}>
+                {t("beginQuest")}
+              </Button>
+            </Link>
+            <Link href="#factions">
+              <Button size="lg" variant="ghost">
+                {t("exploreFactions")}
+              </Button>
+            </Link>
+          </div>
+        </div>
+
+        {/* Global Statistics Counters */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 w-full max-w-4xl pt-8 border-y border-slate-900/60 py-8 px-4 bg-slate-950/10 backdrop-blur-sm rounded-2xl">
+          <div>
+            <span className="block font-orbitron font-black text-2xl sm:text-3xl text-slate-100 tracking-wider">
+              10,482+
+            </span>
+            <span className="block text-[10px] font-orbitron font-bold text-slate-500 tracking-wider uppercase mt-1">
+              {t("activeHeroes")}
+            </span>
+          </div>
+          <div>
+            <span className="block font-orbitron font-black text-2xl sm:text-3xl text-violet-400 tracking-wider filter drop-shadow-[0_0_4px_rgba(139,92,246,0.2)]">
+              2.4M+
+            </span>
+            <span className="block text-[10px] font-orbitron font-bold text-slate-500 tracking-wider uppercase mt-1">
+              {t("xpEarned")}
+            </span>
+          </div>
+          <div>
+            <span className="block font-orbitron font-black text-2xl sm:text-3xl text-cyan-400 tracking-wider filter drop-shadow-[0_0_4px_rgba(6,182,212,0.2)]">
+              41,920
+            </span>
+            <span className="block text-[10px] font-orbitron font-bold text-slate-500 tracking-wider uppercase mt-1">
+              {t("kmTraveled")}
+            </span>
+          </div>
+          <div>
+            <span className="block font-orbitron font-black text-2xl sm:text-3xl text-amber-400 tracking-wider filter drop-shadow-[0_0_4px_rgba(245,158,11,0.2)]">
+              512+
+            </span>
+            <span className="block text-[10px] font-orbitron font-bold text-slate-500 tracking-wider uppercase mt-1">
+              {t("territoriesHeld")}
+            </span>
+          </div>
+        </div>
+
+        {/* Core Game Mechanics */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-5xl pt-10">
+          {highlights.map((item, index) => {
+            const Icon = item.icon;
+            return (
+              <Card key={index} glowColor="none" className="flex flex-col items-center p-6 text-center border-slate-900 bg-slate-950/15">
+                <div className="p-3 bg-slate-950 border border-slate-800 text-violet-400 rounded-xl mb-4 shadow-[0_0_10px_rgba(139,92,246,0.1)]">
+                  <Icon className="h-6 w-6" />
+                </div>
+                <h3 className="font-orbitron font-bold text-slate-200 mb-2 tracking-wider">
+                  {item.title}
+                </h3>
+                <p className="text-xs text-slate-400 leading-relaxed max-w-xs">
+                  {item.text}
+                </p>
+              </Card>
+            );
+          })}
+        </div>
+
+        {/* Faction Previews */}
+        <div id="factions" className="w-full max-w-5xl py-12 scroll-mt-6">
+          <div className="text-center mb-10 space-y-2">
+            <h2 className="font-orbitron font-extrabold text-2xl tracking-wider uppercase text-slate-100">
+              {t("chooseAlignment")}
+            </h2>
+            <p className="text-xs text-slate-400 max-w-md mx-auto">
+              {t("factionDesc")}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {factions.map((faction, index) => {
+              const Icon = faction.icon;
+              return (
+                <Card
+                  key={index}
+                  glowColor={faction.color}
+                  className={`flex flex-col items-center p-6 text-center border ${faction.colorClass} border-opacity-30`}
+                >
+                  <div className={`p-4 bg-slate-950 border border-slate-850 rounded-2xl mb-4 ${faction.iconClass} shadow-[0_0_12px_currentColor]/10`}>
+                    <Icon className="h-8 w-8 filter drop-shadow-[0_0_4px_currentColor]" />
+                  </div>
+                  <h3 className="font-orbitron font-black text-slate-100 text-base tracking-widest mb-3 uppercase">
+                    {faction.name}
+                  </h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    {faction.description}
+                  </p>
+                </Card>
+              );
+            })}
+          </div>
         </div>
       </main>
+
+      {/* Footer */}
+      <footer className="w-full border-t border-slate-950 py-6 text-center z-10 bg-[#070714]">
+        <p className="font-orbitron text-[9px] font-bold tracking-widest text-slate-650 uppercase">
+          {t("footerRights")}
+        </p>
+      </footer>
     </div>
   );
 }
