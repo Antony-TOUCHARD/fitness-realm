@@ -158,19 +158,17 @@ export function WorkoutDetailModal({ workout, isOpen, onClose }: WorkoutDetailMo
               </span>
             </div>
 
-            {workout.avg_heartrate && (
-              <div className="p-3 bg-slate-950/40 rounded-xl border border-slate-900/60 space-y-1 col-span-2 flex items-center justify-between">
-                <div>
-                  <span className="block text-[8px] text-slate-500 font-orbitron font-bold uppercase tracking-wider">
-                    {language === "fr" ? "Fréquence Cardiaque" : "Heart Rate"}
-                  </span>
-                  <span className="block text-sm font-orbitron font-black text-slate-200">
-                    {Math.round(workout.avg_heartrate)} bpm
-                  </span>
-                </div>
-                <Heart className="h-6 w-6 text-pink-500 fill-pink-500/20 animate-pulse shrink-0 mr-1" />
+            <div className="p-3 bg-slate-950/40 rounded-xl border border-slate-900/60 space-y-1 col-span-2 flex items-center justify-between">
+              <div>
+                <span className="block text-[8px] text-slate-500 font-orbitron font-bold uppercase tracking-wider">
+                  {language === "fr" ? "Fréquence Cardiaque" : "Heart Rate"}
+                </span>
+                <span className="block text-sm font-orbitron font-black text-slate-200">
+                  {workout.avg_heartrate ? `${Math.round(workout.avg_heartrate)} bpm` : `-- bpm (${language === "fr" ? "Non enregistré" : "Not recorded"})`}
+                </span>
               </div>
-            )}
+              <Heart className={`h-6 w-6 text-pink-500 fill-pink-500/20 shrink-0 mr-1 ${workout.avg_heartrate ? "animate-pulse" : "opacity-40"}`} />
+            </div>
           </div>
 
           {/* Rewards */}
