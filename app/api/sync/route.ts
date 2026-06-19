@@ -188,8 +188,10 @@ export async function POST(request: Request) {
         
         // If PostgreSQL error code 42703 (undefined_column), retry without new columns
         if (insertError && (insertError.code === "42703" || insertError.message?.includes("column"))) {
-          console.warn("New columns don't exist on live DB, falling back...");
-          const fallbackRes = await supabase
+          console.warn("New columns don't exist on live DB, trying fallback inserts...");
+          
+          // Fallback 1: Try without duration (in case duration is the only missing column)
+          const fallback1Res = await supabase
             .from("workouts")
             .insert({
               user_id: user.id,
@@ -203,11 +205,38 @@ export async function POST(request: Request) {
               gold_gained: goldGained,
               anti_cheat_status: isFlagged ? "Flagged" : "Verified",
               start_date: activity.start_date,
+              territory_id: territoryId,
+              summary_polyline: activity.map?.summary_polyline || null,
             })
             .select()
             .single();
-          insertedWorkout = fallbackRes.data;
-          insertError = fallbackRes.error;
+
+          if (fallback1Res.error && (fallback1Res.error.code === "42703" || fallback1Res.error.message?.includes("column"))) {
+            // Fallback 2: Try without duration, summary_polyline, or territory_id (bare minimum)
+            console.warn("Summary polyline or territory_id also missing, trying bare minimum fallback...");
+            const fallback2Res = await supabase
+              .from("workouts")
+              .insert({
+                user_id: user.id,
+                strava_activity_id: String(activity.id),
+                name: activity.name || "Completed Quest",
+                activity_type: type,
+                distance: distanceKm,
+                elevation_gain: elevationM,
+                avg_heartrate: activity.average_heartrate,
+                xp_gained: xpGained,
+                gold_gained: goldGained,
+                anti_cheat_status: isFlagged ? "Flagged" : "Verified",
+                start_date: activity.start_date,
+              })
+              .select()
+              .single();
+            insertedWorkout = fallback2Res.data;
+            insertError = fallback2Res.error;
+          } else {
+            insertedWorkout = fallback1Res.data;
+            insertError = fallback1Res.error;
+          }
         }
       } catch (err) {
         console.error("Failed to insert workout with territory_id and summary_polyline:", err);
@@ -268,6 +297,77 @@ export async function POST(request: Request) {
           gold: currentGold,
         })
         .eq("id", user.id);
+    }
+
+    // Retroactive repair for older workouts lacking duration or polyline data
+    try {
+      let workoutsToFix = [];
+      let durationColumnSupported = true;
+
+      try {
+        const { data, error } = await supabase
+          .from("workouts")
+          .select("id, strava_activity_id")
+          .eq("user_id", user.id)
+          .or("duration.is.null,summary_polyline.is.null");
+        
+        if (error) throw error;
+        workoutsToFix = data || [];
+      } catch (err) {
+        console.warn("Failed to query duration column for repair, falling back to checking only summary_polyline:", err);
+        durationColumnSupported = false;
+        const { data } = await supabase
+          .from("workouts")
+          .select("id, strava_activity_id")
+          .eq("user_id", user.id)
+          .is("summary_polyline", null);
+        workoutsToFix = data || [];
+      }
+
+      if (workoutsToFix && workoutsToFix.length > 0) {
+        const { getActivity } = await import("@/lib/strava");
+        console.log(`Found ${workoutsToFix.length} old workouts to repair with Strava data...`);
+        for (const w of workoutsToFix) {
+          try {
+            const activityId = Number(w.strava_activity_id);
+            if (!isNaN(activityId)) {
+              const fullActivity = await getActivity(accessToken, activityId);
+              if (fullActivity) {
+                if (durationColumnSupported) {
+                  try {
+                    await supabase
+                      .from("workouts")
+                      .update({
+                        duration: fullActivity.moving_time,
+                        summary_polyline: fullActivity.map?.summary_polyline || null,
+                      })
+                      .eq("id", w.id);
+                  } catch (updateErr) {
+                    console.warn(`Update failed with duration, trying update without duration for workout ${w.id}:`, updateErr);
+                    await supabase
+                      .from("workouts")
+                      .update({
+                        summary_polyline: fullActivity.map?.summary_polyline || null,
+                      })
+                      .eq("id", w.id);
+                  }
+                } else {
+                  await supabase
+                    .from("workouts")
+                    .update({
+                      summary_polyline: fullActivity.map?.summary_polyline || null,
+                    })
+                    .eq("id", w.id);
+                }
+              }
+            }
+          } catch (err) {
+            console.error(`Failed to repair old workout ${w.id} with Strava:`, err);
+          }
+        }
+      }
+    } catch (repairErr) {
+      console.error("Failed to run retroactive repair check:", repairErr);
     }
 
     return NextResponse.json({ synced: newWorkoutsCount });

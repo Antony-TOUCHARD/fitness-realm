@@ -29,11 +29,10 @@ export function WorkoutDetailModal({ workout, isOpen, onClose }: WorkoutDetailMo
     minute: "2-digit",
   });
 
-  const effectiveDuration = workout.duration || Math.round(
-    workout.distance * (workout.activity_type === "Run" ? 330 : workout.activity_type === "Ride" ? 150 : 720)
-  );
+  const effectiveDuration = workout.duration && workout.duration > 0 ? workout.duration : null;
 
-  const formatDuration = (seconds: number): string => {
+  const formatDuration = (seconds: number | null): string => {
+    if (seconds === null) return "--";
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
@@ -43,8 +42,8 @@ export function WorkoutDetailModal({ workout, isOpen, onClose }: WorkoutDetailMo
     return `${mins}m ${secs.toString().padStart(2, "0")}s`;
   };
 
-  const formatSpeedOrPace = (w: Workout, durationSec: number): string => {
-    if (!w.distance || w.distance <= 0) {
+  const formatSpeedOrPace = (w: Workout, durationSec: number | null): string => {
+    if (durationSec === null || !w.distance || w.distance <= 0) {
       return "--";
     }
     if (w.activity_type === "Run") {
