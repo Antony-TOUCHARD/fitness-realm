@@ -29,8 +29,11 @@ export function WorkoutDetailModal({ workout, isOpen, onClose }: WorkoutDetailMo
     minute: "2-digit",
   });
 
-  const formatDuration = (seconds: number | null | undefined): string => {
-    if (!seconds) return "--";
+  const effectiveDuration = workout.duration || Math.round(
+    workout.distance * (workout.activity_type === "Run" ? 330 : workout.activity_type === "Ride" ? 150 : 720)
+  );
+
+  const formatDuration = (seconds: number): string => {
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
@@ -40,17 +43,17 @@ export function WorkoutDetailModal({ workout, isOpen, onClose }: WorkoutDetailMo
     return `${mins}m ${secs.toString().padStart(2, "0")}s`;
   };
 
-  const formatSpeedOrPace = (w: Workout): string => {
-    if (!w.duration || w.duration <= 0 || !w.distance || w.distance <= 0) {
+  const formatSpeedOrPace = (w: Workout, durationSec: number): string => {
+    if (!w.distance || w.distance <= 0) {
       return "--";
     }
     if (w.activity_type === "Run") {
-      const secondsPerKm = w.duration / w.distance;
+      const secondsPerKm = durationSec / w.distance;
       const mins = Math.floor(secondsPerKm / 60);
       const secs = Math.round(secondsPerKm % 60);
       return `${mins}:${secs.toString().padStart(2, "0")} min/km`;
     } else {
-      const speedKmh = w.distance / (w.duration / 3600);
+      const speedKmh = w.distance / (durationSec / 3600);
       return `${speedKmh.toFixed(1)} km/h`;
     }
   };
@@ -82,7 +85,7 @@ export function WorkoutDetailModal({ workout, isOpen, onClose }: WorkoutDetailMo
 
         {/* Map Column */}
         <div className="w-full md:w-1/2 h-64 md:h-auto min-h-[300px] relative bg-slate-950/40">
-          <WorkoutMap polyline={workout.summary_polyline || null} />
+          <WorkoutMap polyline={workout.summary_polyline || null} coordinates={workout.coordinates || null} />
         </div>
 
         {/* Info Column */}
@@ -134,7 +137,7 @@ export function WorkoutDetailModal({ workout, isOpen, onClose }: WorkoutDetailMo
                 {language === "fr" ? "Durée" : "Duration"}
               </span>
               <span className="block text-sm font-orbitron font-black text-slate-200">
-                {formatDuration(workout.duration)}
+                {formatDuration(effectiveDuration)}
               </span>
             </div>
 
@@ -143,7 +146,7 @@ export function WorkoutDetailModal({ workout, isOpen, onClose }: WorkoutDetailMo
                 {workout.activity_type === "Run" ? (language === "fr" ? "Allure Moyenne" : "Avg Pace") : (language === "fr" ? "Vitesse Moyenne" : "Avg Speed")}
               </span>
               <span className="block text-sm font-orbitron font-black text-slate-200">
-                {formatSpeedOrPace(workout)}
+                {formatSpeedOrPace(workout, effectiveDuration)}
               </span>
             </div>
 

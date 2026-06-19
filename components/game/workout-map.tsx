@@ -39,6 +39,7 @@ function decodePolyline(encoded: string): [number, number][] {
 
 interface WorkoutMapProps {
   polyline: string | null;
+  coordinates?: [number, number][] | null;
 }
 
 // Helper to fit bounds automatically
@@ -53,10 +54,12 @@ function MapBounds({ positions }: { positions: [number, number][] }) {
   return null;
 }
 
-export default function WorkoutMap({ polyline }: WorkoutMapProps) {
+export default function WorkoutMap({ polyline, coordinates }: WorkoutMapProps) {
   const positions = React.useMemo(() => {
-    return polyline ? decodePolyline(polyline) : [];
-  }, [polyline]);
+    if (polyline) return decodePolyline(polyline);
+    if (coordinates && coordinates.length > 0) return coordinates;
+    return [];
+  }, [polyline, coordinates]);
 
   // Fix leaflet marker icon issue in Next.js
   useEffect(() => {
