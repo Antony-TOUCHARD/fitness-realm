@@ -827,6 +827,63 @@ export default function ProfilePage() {
     setCoachingAnswers({});
   };
 
+  const handleDisassociateWorkout = (plannedWorkoutId: string) => {
+    if (!profile || !coachingProgram) return;
+    const profileId = profile.id;
+
+    const confirmDisassociate = window.confirm(
+      language === "fr"
+        ? "Voulez-vous vraiment dissocier cette séance ?"
+        : "Are you sure you want to disassociate this workout?"
+    );
+    if (!confirmDisassociate) return;
+
+    const updatedWeeks = coachingProgram.weeks.map((week) => {
+      const updatedWorkouts = week.workouts.map((w) => {
+        if (w.id === plannedWorkoutId) {
+          return {
+            ...w,
+            completed: false,
+            associatedWorkoutId: null,
+            paceAccuracy: null,
+            actualDistance: null,
+            actualDuration: null,
+            actualPace: null,
+            coachFeedback: null,
+          };
+        }
+        return w;
+      });
+      return { ...week, workouts: updatedWorkouts };
+    });
+
+    const updatedProgram = {
+      ...coachingProgram,
+      weeks: updatedWeeks,
+    };
+
+    setCoachingProgram(updatedProgram);
+
+    const programKey = `fitness-realm-coaching-program-${profileId}`;
+    if (!isDemo) {
+      async function saveToDB() {
+        try {
+          const { createClient } = await import("@/lib/supabase/client");
+          const supabase = createClient();
+          await supabase
+            .from("coaching_programs")
+            .update({ weeks_data: updatedWeeks as any })
+            .eq("user_id", profileId);
+        } catch (err) {
+          console.error("Failed to update database on disassociation:", err);
+        }
+      }
+      saveToDB();
+    } else {
+      localStorage.setItem(programKey, JSON.stringify(updatedProgram));
+    }
+  };
+
   const handleAssociateWorkout = (plannedWorkoutId: string, loggedWorkoutId: string) => {
     if (!profile || !coachingProgram) return;
     const profileId = profile.id;
@@ -2402,12 +2459,22 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS age INTEGER;`}</pre>
                                   </div>
 
                                   {w.completed ? (
-                                    <div className="flex items-center gap-1.5 text-[10px] font-orbitron font-bold text-emerald-400">
-                                      <span>✓ {language === "fr" ? "Complété" : "Completed"}</span>
+                                    <div className="flex items-center gap-1.5 text-[10px] font-orbitron font-bold">
+                                      <span className="text-emerald-400">✓ {language === "fr" ? "Complété" : "Completed"}</span>
                                       {w.paceAccuracy && (
-                                        <span className="bg-emerald-950/30 border border-emerald-900/40 px-1.5 py-0.5 rounded uppercase tracking-wider text-[8px]">
+                                        <span className="bg-emerald-950/30 border border-emerald-900/40 px-1.5 py-0.5 rounded uppercase tracking-wider text-[8px] text-emerald-400">
                                           Acc: {w.paceAccuracy}%
                                         </span>
+                                      )}
+                                      {isCurrentWeek && (
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="py-0 px-2 text-[8px] font-orbitron font-bold h-6 uppercase cursor-pointer border-rose-900/50 hover:border-rose-700 text-rose-450 hover:bg-rose-950/20"
+                                          onClick={() => handleDisassociateWorkout(w.id)}
+                                        >
+                                          {language === "fr" ? "Dissocier" : "Disassociate"}
+                                        </Button>
                                       )}
                                     </div>
                                   ) : isCurrentWeek ? (
