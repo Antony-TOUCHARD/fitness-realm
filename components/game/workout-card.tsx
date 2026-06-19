@@ -9,9 +9,10 @@ import { useLanguage } from "@/components/layout/language-provider";
 
 interface WorkoutCardProps {
   workout: Workout;
+  onClick?: () => void;
 }
 
-export function WorkoutCard({ workout }: WorkoutCardProps) {
+export function WorkoutCard({ workout, onClick }: WorkoutCardProps) {
   const [revealed, setRevealed] = useState(false);
   const { t, language } = useLanguage();
 
@@ -82,7 +83,10 @@ export function WorkoutCard({ workout }: WorkoutCardProps) {
   return (
     <Card
       glowColor={config.glowColor}
-      className={`relative overflow-hidden border ${config.border} bg-gradient-to-br ${config.bg} p-5`}
+      onClick={onClick}
+      className={`relative overflow-hidden border ${config.border} bg-gradient-to-br ${config.bg} p-5 ${
+        onClick ? "cursor-pointer hover:border-slate-650/80 transition-all duration-200" : ""
+      }`}
     >
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         {/* Left Side: Icon & Title */}

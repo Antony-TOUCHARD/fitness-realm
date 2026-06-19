@@ -6,6 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FactionBadge } from "@/components/game/faction-badge";
 import { Profile, Workout, Faction } from "@/lib/types";
+import { WorkoutDetailModal } from "@/components/game/workout-detail-modal";
 import {
   isDemoMode,
   demoProfile,
@@ -25,6 +26,7 @@ export function PublicProfileModal({ userId, isOpen, onClose }: PublicProfileMod
   const [profile, setProfile] = useState<any | null>(null);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [loading, setLoading] = useState(false);
+  const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null);
   
   // Cosmetics loaded locally or simulated
   const [equippedTitle, setEquippedTitle] = useState<string | null>(null);
@@ -330,7 +332,8 @@ export function PublicProfileModal({ userId, isOpen, onClose }: PublicProfileMod
                     return (
                       <div
                         key={w.id}
-                        className="p-3 bg-[#111128]/40 border border-slate-900/80 rounded-xl hover:border-slate-800 transition flex items-center justify-between gap-4"
+                        onClick={() => setSelectedWorkout(w)}
+                        className="p-3 bg-[#111128]/40 border border-slate-900/80 rounded-xl hover:border-violet-500/50 hover:bg-[#111128]/70 cursor-pointer transition-all duration-200 flex items-center justify-between gap-4"
                       >
                         <div className="flex items-center gap-3">
                           <div className="h-10 w-10 rounded-lg bg-slate-950/40 border border-slate-850 flex items-center justify-center text-lg shadow-inner shrink-0">
@@ -387,6 +390,12 @@ export function PublicProfileModal({ userId, isOpen, onClose }: PublicProfileMod
           </div>
         )}
       </div>
+
+      <WorkoutDetailModal
+        workout={selectedWorkout}
+        isOpen={selectedWorkout !== null}
+        onClose={() => setSelectedWorkout(null)}
+      />
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { Workout } from "@/lib/types";
 import { isDemoMode, demoWorkouts } from "@/lib/demo-data";
 import { RefreshCw, Compass } from "lucide-react";
 import { useLanguage } from "@/components/layout/language-provider";
+import { WorkoutDetailModal } from "@/components/game/workout-detail-modal";
 
 export default function WorkoutsPage() {
   const { t, language } = useLanguage();
@@ -15,6 +16,7 @@ export default function WorkoutsPage() {
   const [filteredWorkouts, setFilteredWorkouts] = useState<Workout[]>([]);
   const [activeFilter, setActiveFilter] = useState<"All" | "Run" | "Ride" | "Walk">("All");
   const [loading, setLoading] = useState(true);
+  const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null);
 
   const isDemo = isDemoMode();
 
@@ -112,7 +114,11 @@ export default function WorkoutsPage() {
       <div className="space-y-4">
         {filteredWorkouts.length > 0 ? (
           filteredWorkouts.map((workout) => (
-            <WorkoutCard key={workout.id} workout={workout} />
+            <WorkoutCard
+              key={workout.id}
+              workout={workout}
+              onClick={() => setSelectedWorkout(workout)}
+            />
           ))
         ) : (
           <Card className="p-12 text-center border-slate-900 bg-slate-950/10 flex flex-col items-center gap-4">
@@ -128,6 +134,12 @@ export default function WorkoutsPage() {
           </Card>
         )}
       </div>
+
+      <WorkoutDetailModal
+        workout={selectedWorkout}
+        isOpen={selectedWorkout !== null}
+        onClose={() => setSelectedWorkout(null)}
+      />
     </div>
   );
 }
