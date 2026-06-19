@@ -43,8 +43,199 @@ const PRESET_AVATARS = [
   { name: "Lunar Paladin", url: "https://api.dicebear.com/7.x/adventurer/svg?seed=Sassy" },
 ];
 
+const RUN_PACES = [
+  { id: "7:30", label: "Débutant / Très tranquille (7:30 min/km)", emoji: "🐢" },
+  { id: "7:00", label: "Tranquille / Footing très doux (7:00 min/km)", emoji: "🌱" },
+  { id: "6:30", label: "Modéré / Jogging intermédiaire (6:30 min/km)", emoji: "🦊" },
+  { id: "6:00", label: "Régulier / Footing actif (6:00 min/km)", emoji: "🐰" },
+  { id: "5:30", label: "Rythmé / Coureur régulier (5:30 min/km)", emoji: "🦌" },
+  { id: "5:00", label: "Rapide / Coureur avancé (5:00 min/km)", emoji: "🐆" },
+  { id: "4:30", label: "Athlétique / Compétition (4:30 min/km)", emoji: "🦅" }
+];
+
+const RIDE_SPEEDS = [
+  { id: "15 km/h", label: "Loisir / Débutant (15 km/h)", emoji: "🚲" },
+  { id: "18 km/h", label: "Modéré / Sortie tranquille (18 km/h)", emoji: "🌳" },
+  { id: "22 km/h", label: "Régulier / Cycliste actif (22 km/h)", emoji: "🚴" },
+  { id: "26 km/h", label: "Rapide / Cycliste entraîné (26 km/h)", emoji: "⚡" },
+  { id: "30 km/h", label: "Sportif / Sortie rythmée (30 km/h)", emoji: "🔥" }
+];
+
+const WALK_SPEEDS = [
+  { id: "4.0 km/h", label: "Balade / Promenade (4.0 km/h)", emoji: "🚶" },
+  { id: "4.5 km/h", label: "Modéré / Marche habituelle (4.5 km/h)", emoji: "🌳" },
+  { id: "5.0 km/h", label: "Actif / Marche rythmée (5.0 km/h)", emoji: "👣" },
+  { id: "5.5 km/h", label: "Rapide / Marche sportive (5.5 km/h)", emoji: "⚡" },
+  { id: "6.0 km/h", label: "Très rapide / Randonnée active (6.0 km/h)", emoji: "⛰️" }
+];
+
 export default function ProfilePage() {
   const { t, language } = useLanguage();
+
+  const getCoachingWeekDateRange = (startedAtStr: string, weekNumber: number) => {
+    const startedAt = new Date(startedAtStr);
+    const startDayOfWeek = startedAt.getUTCDay(); // 0 = Sunday, 1 = Monday, ...
+    
+    // We want the end of the first week to be the first Monday 00:00:00 UTC after startedAt.
+    // If startedAt is Monday (1), days until next Monday (1) is 7 days.
+    // If startedAt is Sunday (0), days until next Monday (1) is 1 day.
+    // If startedAt is Wednesday (3), days until next Monday (1) is 5 days (8 - 3).
+    const daysUntilFirstMonday = startDayOfWeek === 0 ? 1 : 8 - startDayOfWeek;
+    
+    const firstMonday = new Date(startedAt);
+    firstMonday.setUTCDate(startedAt.getUTCDate() + daysUntilFirstMonday);
+    firstMonday.setUTCHours(0, 0, 0, 0);
+
+    if (weekNumber === 1) {
+      return {
+        start: startedAt,
+        end: firstMonday,
+      };
+    } else {
+      const weekStart = new Date(firstMonday);
+      weekStart.setUTCDate(firstMonday.getUTCDate() + (weekNumber - 2) * 7);
+      
+      const weekEnd = new Date(weekStart);
+      weekEnd.setUTCDate(weekStart.getUTCDate() + 7);
+      
+      return {
+        start: weekStart,
+        end: weekEnd,
+      };
+    }
+  };
+
+  const autoCloseWeekIfNeeded = (program: CoachingProgram, userId: string) => {
+    if (!program || !Array.isArray(program.weeks)) return null;
+
+    let currentProgram = { ...program };
+    let hasChanges = false;
+    const now = new Date();
+
+    while (true) {
+      const startedAtVal = currentProgram.startedAt || new Date().toISOString();
+      const currentWeekNum = currentProgram.currentWeekIndex + 1;
+      
+      const range = getCoachingWeekDateRange(startedAtVal, currentWeekNum);
+
+      if (now > range.end) {
+        const currentWeek = currentProgram.weeks[currentProgram.currentWeekIndex];
+        
+        // If the week index is already pointing to a week that has already been closed/processed
+        // (i.e. status !== 'pending'), we just advance the index without re-running adaptation logic.
+        if (currentWeek.status !== 'pending') {
+          const isLastWeek = currentProgram.currentWeekIndex === currentProgram.weeks.length - 1;
+          if (!isLastWeek) {
+            currentProgram = {
+              ...currentProgram,
+              currentWeekIndex: currentProgram.currentWeekIndex + 1,
+              claimed: false,
+            };
+            hasChanges = true;
+            continue; // evaluate next week
+          }
+          break; // reached end of program
+        }
+
+        // If status is pending, we close it based on completion rate
+        const totalWorkouts = currentWeek.workouts.length;
+        const completedWorkouts = currentWeek.workouts.filter((w) => w.completed).length;
+        const completionRate = completedWorkouts / totalWorkouts;
+
+        let weekStatus: 'completed' | 'partial' | 'failed' = 'partial';
+        let report = "";
+
+        if (completionRate === 1.0) {
+          weekStatus = 'completed';
+          report = language === "fr"
+            ? "Clôture automatique : Semaine complétée à 100%. Surcharge progressive appliquée : volume augmenté de +10% pour la semaine suivante."
+            : "Auto-close: Week completed at 100%. Progressive overload applied: volume increased by +10% for the next week.";
+        } else if (completionRate >= 0.5) {
+          weekStatus = 'partial';
+          report = language === "fr"
+            ? "Clôture automatique : Semaine partiellement complétée. Volume stabilisé pour la semaine suivante."
+            : "Auto-close: Week partially completed. Volume stabilized for the next week.";
+        } else {
+          weekStatus = 'failed';
+          report = language === "fr"
+            ? "Clôture automatique : Semaine incomplète. Volume de la semaine suivante réduit de -10% pour récupération et entraînements non complétés reportés."
+            : "Auto-close: Week incomplete. Next week volume reduced by -10% for recovery, and incomplete sessions rolled over.";
+        }
+
+        const updatedWeeks = currentProgram.weeks.map((week, idx) => {
+          if (idx === currentProgram.currentWeekIndex) {
+            return {
+              ...week,
+              status: weekStatus,
+              adaptationReport: report,
+            };
+          }
+          
+          // Apply negative adaptation (failed week: -10% target volume + rollover incomplete workouts)
+          if (weekStatus === 'failed' && idx === currentProgram.currentWeekIndex + 1) {
+            const incompleteWorkouts = currentWeek.workouts
+              .filter((w) => !w.completed)
+              .map((w) => ({
+                ...w,
+                id: `${w.id}-rollover`,
+                name: `${w.name} (Reporté)`,
+                completed: false,
+                associatedWorkoutId: null,
+                paceAccuracy: null,
+              }));
+
+            const adaptedNextWorkouts = week.workouts.map((w) => {
+              return {
+                ...w,
+                targetDistance: w.targetDistance ? Math.round(w.targetDistance * 0.9 * 10) / 10 : null,
+                targetDuration: w.targetDuration ? Math.round(w.targetDuration * 0.9) : null,
+              };
+            });
+
+            return {
+              ...week,
+              workouts: [...adaptedNextWorkouts, ...incompleteWorkouts],
+            };
+          }
+
+          // Apply positive adaptation (completed week: +10% target volume)
+          if (weekStatus === 'completed' && idx === currentProgram.currentWeekIndex + 1) {
+            const adaptedNextWorkouts = week.workouts.map((w) => {
+              return {
+                ...w,
+                targetDistance: w.targetDistance ? Math.round(w.targetDistance * 1.1 * 10) / 10 : null,
+                targetDuration: w.targetDuration ? Math.round(w.targetDuration * 1.1) : null,
+              };
+            });
+            return {
+              ...week,
+              workouts: adaptedNextWorkouts,
+            };
+          }
+
+          return week;
+        });
+
+        const isLastWeek = currentProgram.currentWeekIndex === currentProgram.weeks.length - 1;
+        const nextWeekIndex = isLastWeek ? currentProgram.currentWeekIndex : currentProgram.currentWeekIndex + 1;
+
+        currentProgram = {
+          ...currentProgram,
+          currentWeekIndex: nextWeekIndex,
+          weeks: updatedWeeks,
+          claimed: false,
+        };
+        hasChanges = true;
+
+        if (isLastWeek) break;
+      } else {
+        break; // Current week deadline not yet passed
+      }
+    }
+
+    return hasChanges ? currentProgram : null;
+  };
+
   const [profile, setProfile] = useState<Profile | null>(null);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,9 +266,13 @@ export default function ProfilePage() {
   const [coachingAnswers, setCoachingAnswers] = useState<Partial<CoachingAnswers>>({});
   const [bonusExpires, setBonusExpires] = useState<number | null>(null);
   const [remainingBonusTime, setRemainingBonusTime] = useState<string>("");
+  const [remainingWeekTime, setRemainingWeekTime] = useState<string>("");
   const [activeWeekTab, setActiveWeekTab] = useState<number>(1);
   const [workoutToAssociate, setWorkoutToAssociate] = useState<PlannedWorkout | null>(null);
   const [showAssociateModal, setShowAssociateModal] = useState<boolean>(false);
+  const [coachingHours, setCoachingHours] = useState<number>(0);
+  const [coachingMinutes, setCoachingMinutes] = useState<number>(30);
+  const [coachingSeconds, setCoachingSeconds] = useState<number>(0);
 
   // Cosmetics lists with unlocking conditions and limited editions
   const titlesList = [
@@ -325,7 +520,7 @@ export default function ProfilePage() {
               .maybeSingle();
             
             if (coachingData) {
-              dbCoaching = {
+              const programLoaded: CoachingProgram = {
                 name: coachingData.name,
                 sport: coachingData.sport as any,
                 planType: coachingData.plan_type,
@@ -333,7 +528,26 @@ export default function ProfilePage() {
                 targetPaces: coachingData.target_paces as any,
                 weeks: coachingData.weeks_data as any,
                 claimed: coachingData.claimed,
+                startedAt: coachingData.created_at,
               };
+
+              const autoClosed = autoCloseWeekIfNeeded(programLoaded, user.id);
+              if (autoClosed) {
+                dbCoaching = autoClosed;
+                supabase
+                  .from("coaching_programs")
+                  .update({
+                    current_week_index: autoClosed.currentWeekIndex,
+                    weeks_data: autoClosed.weeks,
+                    claimed: autoClosed.claimed,
+                  })
+                  .eq("user_id", user.id)
+                  .then(({ error }) => {
+                    if (error) console.error("Error saving auto-closed program to DB:", error);
+                  });
+              } else {
+                dbCoaching = programLoaded;
+              }
             }
 
             const { data: boostData } = await supabase
@@ -397,8 +611,15 @@ export default function ProfilePage() {
           if (programRaw) {
             try {
               const parsed = JSON.parse(programRaw);
-              setCoachingProgram(parsed);
-              setActiveWeekTab(parsed.currentWeekIndex + 1);
+              const autoClosed = autoCloseWeekIfNeeded(parsed, activeProfile.id);
+              if (autoClosed) {
+                setCoachingProgram(autoClosed);
+                setActiveWeekTab(autoClosed.currentWeekIndex + 1);
+                localStorage.setItem(programKey, JSON.stringify(autoClosed));
+              } else {
+                setCoachingProgram(parsed);
+                setActiveWeekTab(parsed.currentWeekIndex + 1);
+              }
             } catch {}
           } else {
             setCoachingProgram(null);
@@ -472,6 +693,66 @@ export default function ProfilePage() {
     return () => clearInterval(interval);
   }, [bonusExpires]);
 
+  useEffect(() => {
+    if (!coachingProgram || !coachingProgram.weeks) {
+      setRemainingWeekTime("");
+      return;
+    }
+
+    const updateWeekTime = () => {
+      const range = getCoachingWeekDateRange(
+        coachingProgram.startedAt || new Date().toISOString(),
+        coachingProgram.currentWeekIndex + 1
+      );
+      const diff = range.end.getTime() - Date.now();
+      if (diff <= 0) {
+        setRemainingWeekTime(language === "fr" ? "Semaine Expirée" : "Week Expired");
+        
+        // Trigger auto rollover check!
+        if (profile) {
+          const autoClosed = autoCloseWeekIfNeeded(coachingProgram, profile.id);
+          if (autoClosed) {
+            setCoachingProgram(autoClosed);
+            setActiveWeekTab(autoClosed.currentWeekIndex + 1);
+            const programKey = `fitness-realm-coaching-program-${profile.id}`;
+            localStorage.setItem(programKey, JSON.stringify(autoClosed));
+            // Trigger database update if not in demo mode
+            if (!isDemo) {
+              import("@/lib/supabase/client").then(({ createClient }) => {
+                const supabase = createClient();
+                supabase
+                  .from("coaching_programs")
+                  .update({
+                    current_week_index: autoClosed.currentWeekIndex,
+                    weeks_data: autoClosed.weeks,
+                    claimed: autoClosed.claimed,
+                  })
+                  .eq("user_id", profile.id)
+                  .then(({ error }) => {
+                    if (error) console.error("Error saving auto-closed program to DB:", error);
+                  });
+              });
+            }
+          }
+        }
+      } else {
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hrs = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const secs = Math.floor((diff % (1000 * 60)) / 1000);
+        if (days > 0) {
+          setRemainingWeekTime(language === "fr" ? `${days}j ${hrs}h ${mins}m` : `${days}d ${hrs}h ${mins}m`);
+        } else {
+          setRemainingWeekTime(`${hrs}h ${mins}m ${secs}s`);
+        }
+      }
+    };
+
+    updateWeekTime();
+    const interval = setInterval(updateWeekTime, 1000);
+    return () => clearInterval(interval);
+  }, [coachingProgram, profile, language, isDemo]);
+
   const getWorkoutWeekOffset = React.useCallback((startDateStr: string) => {
     const refDate = isDemo ? new Date("2026-06-18T23:59:59Z") : new Date();
     const startDate = new Date(startDateStr);
@@ -486,7 +767,7 @@ export default function ProfilePage() {
   const handleSubmitQuestionnaire = () => {
     if (!profile) return;
     const profileId = profile.id;
-    const { sport, planType, currentCapacity, targetGoal, frequency, weeksCount } = coachingAnswers;
+    const { sport, planType, currentCapacity, targetGoal, frequency, weeksCount, referencePace } = coachingAnswers;
     if (!sport || !planType || !currentCapacity || !targetGoal || !frequency || !weeksCount) return;
 
     // Pace calculations (min/km)
@@ -495,32 +776,38 @@ export default function ProfilePage() {
     let intervalsPace = "5:15";
 
     if (sport === "Run") {
-      if (currentCapacity === "none" || currentCapacity === "1km") {
-        easyPace = "7:30";
-        tempoPace = "6:45";
-        intervalsPace = "6:15";
-      } else if (currentCapacity === "5km") {
-        easyPace = "6:15";
-        tempoPace = "5:30";
-        intervalsPace = "5:00";
-      } else if (currentCapacity === "10km") {
-        easyPace = "5:30";
-        tempoPace = "4:45";
-        intervalsPace = "4:15";
+      if (referencePace) {
+        easyPace = referencePace;
+        const easySec = parsePaceToSeconds(easyPace, "Run");
+        tempoPace = formatSecondsToPace(easySec - 45, "Run");
+        intervalsPace = formatSecondsToPace(easySec - 90, "Run");
       } else {
-        // 20km+
-        easyPace = "4:45";
-        tempoPace = "4:00";
-        intervalsPace = "3:30";
+        if (currentCapacity === "none" || currentCapacity === "1km") {
+          easyPace = "7:30";
+          tempoPace = "6:45";
+          intervalsPace = "6:15";
+        } else if (currentCapacity === "5km") {
+          easyPace = "6:15";
+          tempoPace = "5:30";
+          intervalsPace = "5:00";
+        } else if (currentCapacity === "10km") {
+          easyPace = "5:30";
+          tempoPace = "4:45";
+          intervalsPace = "4:15";
+        } else {
+          easyPace = "4:45";
+          tempoPace = "4:00";
+          intervalsPace = "3:30";
+        }
       }
 
-      // If performance goal, speed up by 30s/km
+      // If performance goal, speed up by 15s/km
       if (targetGoal === "time_performance") {
         const speedUpPace = (paceStr: string): string => {
           const parts = paceStr.split(":");
           let min = parseInt(parts[0]);
           let sec = parseInt(parts[1]);
-          sec -= 30;
+          sec -= 15;
           if (sec < 0) {
             sec += 60;
             min -= 1;
@@ -532,34 +819,47 @@ export default function ProfilePage() {
         intervalsPace = speedUpPace(intervalsPace);
       }
     } else if (sport === "Ride") {
-      // Cycling speed in km/h
-      if (currentCapacity === "none" || currentCapacity === "1km") {
-        easyPace = "18 km/h";
-        tempoPace = "22 km/h";
-        intervalsPace = "26 km/h";
-      } else if (currentCapacity === "5km") {
-        easyPace = "22 km/h";
-        tempoPace = "26 km/h";
-        intervalsPace = "30 km/h";
+      if (referencePace) {
+        easyPace = referencePace;
+        const easyVal = parseInt(easyPace);
+        tempoPace = `${easyVal + 4} km/h`;
+        intervalsPace = `${easyVal + 8} km/h`;
       } else {
-        easyPace = "26 km/h";
-        tempoPace = "30 km/h";
-        intervalsPace = "35 km/h";
+        if (currentCapacity === "none" || currentCapacity === "1km") {
+          easyPace = "18 km/h";
+          tempoPace = "22 km/h";
+          intervalsPace = "26 km/h";
+        } else if (currentCapacity === "5km") {
+          easyPace = "22 km/h";
+          tempoPace = "26 km/h";
+          intervalsPace = "30 km/h";
+        } else {
+          easyPace = "26 km/h";
+          tempoPace = "30 km/h";
+          intervalsPace = "35 km/h";
+        }
       }
       if (targetGoal === "time_performance") {
-        easyPace = `${parseInt(easyPace) + 3} km/h`;
-        tempoPace = `${parseInt(tempoPace) + 4} km/h`;
-        intervalsPace = `${parseInt(intervalsPace) + 5} km/h`;
+        easyPace = `${parseInt(easyPace) + 2} km/h`;
+        tempoPace = `${parseInt(tempoPace) + 3} km/h`;
+        intervalsPace = `${parseInt(intervalsPace) + 4} km/h`;
       }
     } else {
       // Walking speed in km/h
-      easyPace = "4.5 km/h";
-      tempoPace = "5.5 km/h";
-      intervalsPace = "6.5 km/h";
+      if (referencePace) {
+        easyPace = referencePace;
+        const easyVal = parseFloat(referencePace);
+        tempoPace = `${(easyVal + 1.0).toFixed(1)} km/h`;
+        intervalsPace = `${(easyVal + 2.0).toFixed(1)} km/h`;
+      } else {
+        easyPace = "4.5 km/h";
+        tempoPace = "5.5 km/h";
+        intervalsPace = "6.5 km/h";
+      }
       if (targetGoal === "time_performance") {
-        easyPace = "5.0 km/h";
-        tempoPace = "6.0 km/h";
-        intervalsPace = "7.0 km/h";
+        easyPace = `${(parseFloat(easyPace) + 0.5).toFixed(1)} km/h`;
+        tempoPace = `${(parseFloat(tempoPace) + 0.5).toFixed(1)} km/h`;
+        intervalsPace = `${(parseFloat(intervalsPace) + 0.5).toFixed(1)} km/h`;
       }
     }
 
@@ -717,6 +1017,7 @@ export default function ProfilePage() {
       },
       weeks,
       claimed: false,
+      startedAt: new Date().toISOString(),
     };
 
     const programKey = `fitness-realm-coaching-program-${profileId}`;
@@ -827,6 +1128,122 @@ export default function ProfilePage() {
     setCoachingAnswers({});
   };
 
+  // Helper to parse a pace string to seconds per km
+  const parsePaceToSeconds = (paceStr: string, sport: string): number => {
+    if (!paceStr) return 360; // fallback to 6:00 min/km
+    if (sport === "Run") {
+      const parts = paceStr.split(":");
+      const minutes = parseInt(parts[0], 10) || 0;
+      const seconds = parseInt(parts[1], 10) || 0;
+      return minutes * 60 + seconds;
+    } else {
+      // Ride or Walk (speed in km/h)
+      const speed = parseFloat(paceStr.replace(/[^\d.]/g, "")) || 10.0;
+      return speed > 0 ? 3600 / speed : 360;
+    }
+  };
+
+  // Helper to format seconds per km back to the sport's pace/speed string
+  const formatSecondsToPace = (seconds: number, sport: string): string => {
+    if (sport === "Run") {
+      const minutes = Math.floor(seconds / 60);
+      const secs = Math.round(seconds % 60);
+      return `${minutes}:${secs.toString().padStart(2, "0")}`;
+    } else {
+      // Ride or Walk (speed in km/h)
+      const speed = seconds > 0 ? 3600 / seconds : 10.0;
+      const formattedSpeed = Math.round(speed * 10) / 10;
+      return `${formattedSpeed} km/h`;
+    }
+  };
+
+  // Helper to adjust a pace string by a multiplier (e.g. 1.1 for 10% slower, 0.9 for 10% faster)
+  const adjustPaceString = (paceStr: string, multiplier: number, sport: string): string => {
+    const seconds = parsePaceToSeconds(paceStr, sport);
+    const adjustedSeconds = seconds * multiplier;
+    return formatSecondsToPace(adjustedSeconds, sport);
+  };
+
+  const getReferenceDistance = (capacity: string, sport: string): number => {
+    if (sport === "Run") {
+      switch (capacity) {
+        case "none": return 1;
+        case "1km": return 2;
+        case "5km": return 5;
+        case "10km": return 10;
+        case "20km+": return 15;
+        default: return 5;
+      }
+    } else if (sport === "Ride") {
+      switch (capacity) {
+        case "none": return 5;
+        case "1km": return 10;
+        case "5km": return 20;
+        case "10km": return 40;
+        case "20km+": return 80;
+        default: return 20;
+      }
+    } else {
+      // Walk
+      switch (capacity) {
+        case "none": return 1;
+        case "1km": return 2;
+        case "5km": return 5;
+        case "10km": return 10;
+        case "20km+": return 15;
+        default: return 5;
+      }
+    }
+  };
+
+  const getDefaultDuration = (distance: number, sport: string): { h: number; m: number; s: number } => {
+    if (sport === "Run") {
+      switch (distance) {
+        case 1: return { h: 0, m: 7, s: 0 };
+        case 2: return { h: 0, m: 14, s: 0 };
+        case 5: return { h: 0, m: 35, s: 0 };
+        case 10: return { h: 1, m: 10, s: 0 };
+        case 15: return { h: 1, m: 50, s: 0 };
+        default: return { h: 0, m: 35, s: 0 };
+      }
+    } else if (sport === "Ride") {
+      switch (distance) {
+        case 5: return { h: 0, m: 15, s: 0 };
+        case 10: return { h: 0, m: 30, s: 0 };
+        case 20: return { h: 1, m: 0, s: 0 };
+        case 40: return { h: 2, m: 0, s: 0 };
+        case 80: return { h: 4, m: 0, s: 0 };
+        default: return { h: 1, m: 0, s: 0 };
+      }
+    } else {
+      // Walk
+      switch (distance) {
+        case 1: return { h: 0, m: 12, s: 0 };
+        case 2: return { h: 0, m: 25, s: 0 };
+        case 5: return { h: 1, m: 0, s: 0 };
+        case 10: return { h: 2, m: 0, s: 0 };
+        case 15: return { h: 3, m: 0, s: 0 };
+        default: return { h: 1, m: 0, s: 0 };
+      }
+    }
+  };
+
+  const calculateReferencePace = (sport: string, distance: number, h: number, m: number, s: number): string => {
+    const totalSeconds = h * 3600 + m * 60 + s;
+    if (totalSeconds <= 0) return sport === "Run" ? "6:00" : sport === "Ride" ? "20 km/h" : "5 km/h";
+    
+    if (sport === "Run") {
+      const paceSeconds = totalSeconds / distance;
+      const minutes = Math.floor(paceSeconds / 60);
+      const secs = Math.round(paceSeconds % 60);
+      return `${minutes}:${secs.toString().padStart(2, "0")}`;
+    } else {
+      // Ride or Walk
+      const calcSpeed = (distance * 3600) / totalSeconds;
+      return `${calcSpeed.toFixed(1)} km/h`;
+    }
+  };
+
   const handleDisassociateWorkout = (plannedWorkoutId: string) => {
     if (!profile || !coachingProgram) return;
     const profileId = profile.id;
@@ -837,6 +1254,43 @@ export default function ProfilePage() {
         : "Are you sure you want to disassociate this workout?"
     );
     if (!confirmDisassociate) return;
+
+    // Find the planned workout to get rewards
+    let plannedWorkout: PlannedWorkout | undefined;
+    for (const week of coachingProgram.weeks) {
+      const found = week.workouts.find((w) => w.id === plannedWorkoutId);
+      if (found) {
+        plannedWorkout = found;
+        break;
+      }
+    }
+    if (!plannedWorkout) return;
+
+    const xpReward = plannedWorkout.xpReward || 150;
+    const goldReward = plannedWorkout.goldReward || 50;
+
+    let currentLevel = profile.level;
+    let currentXP = profile.xp;
+    let currentGold = profile.gold;
+
+    let totalXP = currentXP - xpReward;
+    while (totalXP < 0 && currentLevel > 1) {
+      currentLevel -= 1;
+      totalXP += 1000 * currentLevel;
+    }
+    currentXP = Math.max(0, totalXP);
+    currentGold = Math.max(0, currentGold - goldReward);
+
+    const updatedProfile = {
+      ...profile,
+      level: currentLevel,
+      xp: currentXP,
+      gold: currentGold,
+    };
+
+    setProfile(updatedProfile);
+    const fallbackKey = `fitness-realm-profile-fallback-${profile.id}`;
+    localStorage.setItem(fallbackKey, JSON.stringify(updatedProfile));
 
     const updatedWeeks = coachingProgram.weeks.map((week) => {
       const updatedWorkouts = week.workouts.map((w) => {
@@ -874,6 +1328,15 @@ export default function ProfilePage() {
             .from("coaching_programs")
             .update({ weeks_data: updatedWeeks as any })
             .eq("user_id", profileId);
+
+          await supabase
+            .from("profiles")
+            .update({
+              level: currentLevel,
+              xp: currentXP,
+              gold: currentGold,
+            })
+            .eq("id", profileId);
         } catch (err) {
           console.error("Failed to update database on disassociation:", err);
         }
@@ -882,6 +1345,8 @@ export default function ProfilePage() {
     } else {
       localStorage.setItem(programKey, JSON.stringify(updatedProgram));
     }
+
+    window.dispatchEvent(new Event("fitness-realm-profile-updated"));
   };
 
   const handleAssociateWorkout = (plannedWorkoutId: string, loggedWorkoutId: string) => {
@@ -890,42 +1355,6 @@ export default function ProfilePage() {
 
     const loggedWorkout = workouts.find((w) => w.id === loggedWorkoutId);
     if (!loggedWorkout) return;
-
-    // Helper to parse a pace string to seconds per km
-    const parsePaceToSeconds = (paceStr: string, sport: string): number => {
-      if (!paceStr) return 360; // fallback to 6:00 min/km
-      if (sport === "Run") {
-        const parts = paceStr.split(":");
-        const minutes = parseInt(parts[0], 10) || 0;
-        const seconds = parseInt(parts[1], 10) || 0;
-        return minutes * 60 + seconds;
-      } else {
-        // Ride or Walk (speed in km/h)
-        const speed = parseFloat(paceStr.replace(/[^\d.]/g, "")) || 10.0;
-        return speed > 0 ? 3600 / speed : 360;
-      }
-    };
-
-    // Helper to format seconds per km back to the sport's pace/speed string
-    const formatSecondsToPace = (seconds: number, sport: string): string => {
-      if (sport === "Run") {
-        const minutes = Math.floor(seconds / 60);
-        const secs = Math.round(seconds % 60);
-        return `${minutes}:${secs.toString().padStart(2, "0")}`;
-      } else {
-        // Ride or Walk (speed in km/h)
-        const speed = seconds > 0 ? 3600 / seconds : 10.0;
-        const formattedSpeed = Math.round(speed * 10) / 10;
-        return `${formattedSpeed} km/h`;
-      }
-    };
-
-    // Helper to adjust a pace string by a multiplier (e.g. 1.1 for 10% slower, 0.9 for 10% faster)
-    const adjustPaceString = (paceStr: string, multiplier: number, sport: string): string => {
-      const seconds = parsePaceToSeconds(paceStr, sport);
-      const adjustedSeconds = seconds * multiplier;
-      return formatSecondsToPace(adjustedSeconds, sport);
-    };
 
     // 1. Find the planned workout to get targets
     let targetPaceStr = coachingProgram.targetPaces.easy;
@@ -1158,6 +1587,15 @@ export default function ProfilePage() {
               weeks_data: updatedWeeks 
             })
             .eq("user_id", profileId);
+
+          await supabase
+            .from("profiles")
+            .update({
+              level: currentLevel,
+              xp: currentXP,
+              gold: currentGold,
+            })
+            .eq("id", profileId);
         } catch (err) {
           console.error("Failed to save association to database:", err);
         }
@@ -1488,6 +1926,40 @@ export default function ProfilePage() {
         year: "numeric",
       })
     : "";
+
+  // Calculate eligible workouts for association if modal is active
+  const dateRangeForModal = showAssociateModal && workoutToAssociate && coachingProgram
+    ? getCoachingWeekDateRange(
+        coachingProgram.startedAt || new Date().toISOString(),
+        coachingProgram.currentWeekIndex + 1
+      )
+    : null;
+
+  const eligibleWorkoutsForModal = showAssociateModal && workoutToAssociate && coachingProgram && dateRangeForModal
+    ? (() => {
+        const alreadyAssociatedIds = new Set<string>();
+        coachingProgram.weeks.forEach(week => {
+          week.workouts.forEach(w => {
+            if (w.associatedWorkoutId) {
+              alreadyAssociatedIds.add(w.associatedWorkoutId);
+            }
+          });
+        });
+
+        return workouts.filter(w => {
+          if (alreadyAssociatedIds.has(w.id)) return false;
+          const sport = coachingProgram.sport;
+          let sportMatch = false;
+          if (sport === "Run") sportMatch = w.activity_type === "Run";
+          else if (sport === "Ride") sportMatch = w.activity_type === "Ride";
+          else if (sport === "Walk") sportMatch = w.activity_type === "Walk" || w.activity_type === "Hike";
+          if (!sportMatch) return false;
+
+          const activityDate = new Date(w.start_date);
+          return activityDate >= dateRangeForModal.start && activityDate < dateRangeForModal.end;
+        });
+      })()
+    : [];
 
   return (
     <div className="space-y-6">
@@ -2090,41 +2562,70 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS age INTEGER;`}</pre>
                         <ChevronLeft className="h-4 w-4" />
                       </button>
                       <h4 className="text-xs font-orbitron font-extrabold text-slate-300 uppercase tracking-wider">
-                        {language === "fr" ? "3. Combien pouvez-vous courir actuellement sans vous arrêter ?" : "3. What is your current running capacity?"}
+                        {coachingAnswers.sport === "Run"
+                          ? (language === "fr" ? "3. Combien pouvez-vous courir actuellement sans vous arrêter ?" : "3. What is your current running capacity?")
+                          : coachingAnswers.sport === "Ride"
+                          ? (language === "fr" ? "3. Quelle distance pouvez-vous rouler actuellement sans vous arrêter ?" : "3. What is your current cycling capacity?")
+                          : (language === "fr" ? "3. Quelle distance pouvez-vous marcher actuellement sans vous arrêter ?" : "3. What is your current walking capacity?")
+                        }
                       </h4>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {[
-                        { id: "none", label: "Débutant (Moins de 1km)", emoji: "🐢" },
-                        { id: "1km", label: "1 à 2 km", emoji: "🐰" },
-                        { id: "5km", label: "5 km", emoji: "🦊" },
-                        { id: "10km", label: "10 km", emoji: "🦌" },
-                        { id: "20km+", label: "Plus de 15 km", emoji: "🦅" }
-                      ].map((cap) => (
-                        <button
-                          key={cap.id}
-                          type="button"
-                          onClick={() => {
-                            setCoachingAnswers((prev) => ({ ...prev, currentCapacity: cap.id as any }));
-                            setCoachingStep(4);
-                          }}
-                          className={`p-3 rounded-xl border text-left font-orbitron font-bold text-xs transition-all cursor-pointer ${
-                            coachingAnswers.currentCapacity === cap.id
-                              ? "bg-violet-950/30 border-violet-500 text-violet-400 shadow-[0_0_10px_rgba(139,92,246,0.2)]"
-                              : "bg-slate-950/40 border-slate-900 text-slate-400 hover:border-slate-800"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-lg">{cap.emoji}</span>
-                            <span className="uppercase tracking-wider text-[8px]">{cap.label}</span>
-                          </div>
-                        </button>
-                      ))}
+                      {(() => {
+                        const capOptions = coachingAnswers.sport === "Run"
+                          ? [
+                              { id: "none", label: language === "fr" ? "Débutant (Moins de 1km)" : "Beginner (Less than 1km)", emoji: "🐢" },
+                              { id: "1km", label: language === "fr" ? "1 à 2 km" : "1 to 2 km", emoji: "🐰" },
+                              { id: "5km", label: "5 km", emoji: "🦊" },
+                              { id: "10km", label: "10 km", emoji: "🦌" },
+                              { id: "20km+", label: language === "fr" ? "Plus de 15 km" : "More than 15 km", emoji: "🦅" }
+                            ]
+                          : coachingAnswers.sport === "Ride"
+                          ? [
+                              { id: "none", label: language === "fr" ? "Débutant (Moins de 5km)" : "Beginner (Less than 5km)", emoji: "🚲" },
+                              { id: "1km", label: "10 km", emoji: "🌳" },
+                              { id: "5km", label: "20 km", emoji: "🚴" },
+                              { id: "10km", label: "40 km", emoji: "⚡" },
+                              { id: "20km+", label: language === "fr" ? "Plus de 60 km" : "More than 60 km", emoji: "🔥" }
+                            ]
+                          : [ // Walk
+                              { id: "none", label: language === "fr" ? "Débutant (Moins de 1km)" : "Beginner (Less than 1km)", emoji: "🚶" },
+                              { id: "1km", label: "2 km", emoji: "🌳" },
+                              { id: "5km", label: "5 km", emoji: "👣" },
+                              { id: "10km", label: "10 km", emoji: "⚡" },
+                              { id: "20km+", label: language === "fr" ? "Plus de 15 km" : "More than 15 km", emoji: "⛰️" }
+                            ];
+                        return capOptions.map((cap) => (
+                          <button
+                            key={cap.id}
+                            type="button"
+                            onClick={() => {
+                              setCoachingAnswers((prev) => ({ ...prev, currentCapacity: cap.id as any }));
+                              const dist = getReferenceDistance(cap.id, coachingAnswers.sport || "Run");
+                              const def = getDefaultDuration(dist, coachingAnswers.sport || "Run");
+                              setCoachingHours(def.h);
+                              setCoachingMinutes(def.m);
+                              setCoachingSeconds(def.s);
+                              setCoachingStep(4);
+                            }}
+                            className={`p-3 rounded-xl border text-left font-orbitron font-bold text-xs transition-all cursor-pointer ${
+                              coachingAnswers.currentCapacity === cap.id
+                                ? "bg-violet-950/30 border-violet-500 text-violet-400 shadow-[0_0_10px_rgba(139,92,246,0.2)]"
+                                : "bg-slate-950/40 border-slate-900 text-slate-400 hover:border-slate-800"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">{cap.emoji}</span>
+                              <span className="uppercase tracking-wider text-[8px]">{cap.label}</span>
+                            </div>
+                          </button>
+                        ));
+                      })()}
                     </div>
                   </div>
                 )}
 
-                {/* 5. Questionnaire Step 4: Target Goal Type */}
+                {/* 5. Questionnaire Step 3b (4): Reference Pace / Speed */}
                 {coachingStep === 4 && (
                   <div className="space-y-4">
                     <div className="flex items-center gap-2">
@@ -2135,8 +2636,176 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS age INTEGER;`}</pre>
                       >
                         <ChevronLeft className="h-4 w-4" />
                       </button>
+                      {(() => {
+                        const refDistance = coachingAnswers.currentCapacity
+                          ? getReferenceDistance(coachingAnswers.currentCapacity, coachingAnswers.sport || "Run")
+                          : 5;
+                        return (
+                          <h4 className="text-xs font-orbitron font-extrabold text-slate-300 uppercase tracking-wider">
+                            {coachingAnswers.sport === "Run"
+                              ? (language === "fr" 
+                                  ? `4. En combien de temps pouvez-vous courir ${refDistance} km ?` 
+                                  : `4. In how much time can you run ${refDistance} km?`)
+                              : coachingAnswers.sport === "Ride"
+                              ? (language === "fr" 
+                                  ? `4. En combien de temps pouvez-vous rouler ${refDistance} km ?` 
+                                  : `4. In how much time can you ride ${refDistance} km?`)
+                              : (language === "fr" 
+                                  ? `4. En combien de temps pouvez-vous marcher ${refDistance} km ?` 
+                                  : `4. In how much time can you walk ${refDistance} km?`)
+                            }
+                          </h4>
+                        );
+                      })()}
+                    </div>
+                    {(() => {
+                      const refDistance = coachingAnswers.currentCapacity
+                        ? getReferenceDistance(coachingAnswers.currentCapacity, coachingAnswers.sport || "Run")
+                        : 5;
+
+                      const calculatedPace = calculateReferencePace(
+                        coachingAnswers.sport || "Run",
+                        refDistance,
+                        coachingHours,
+                        coachingMinutes,
+                        coachingSeconds
+                      );
+
+                      let calculatedEasy = "6:30";
+                      let calculatedTempo = "5:45";
+                      let calculatedIntervals = "5:15";
+
+                      if (coachingAnswers.sport === "Run") {
+                        calculatedEasy = calculatedPace;
+                        const easySec = parsePaceToSeconds(calculatedEasy, "Run");
+                        calculatedTempo = formatSecondsToPace(easySec - 45, "Run");
+                        calculatedIntervals = formatSecondsToPace(easySec - 90, "Run");
+                      } else if (coachingAnswers.sport === "Ride") {
+                        calculatedEasy = calculatedPace;
+                        const easyVal = parseInt(calculatedEasy) || 20;
+                        calculatedTempo = `${easyVal + 4} km/h`;
+                        calculatedIntervals = `${easyVal + 8} km/h`;
+                      } else {
+                        // Walk
+                        calculatedEasy = calculatedPace;
+                        const easyVal = parseFloat(calculatedEasy) || 5.0;
+                        calculatedTempo = `${(easyVal + 1.0).toFixed(1)} km/h`;
+                        calculatedIntervals = `${(easyVal + 2.0).toFixed(1)} km/h`;
+                      }
+
+                      return (
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-center gap-3 bg-slate-950/60 p-4 rounded-xl border border-slate-900">
+                            {/* Hours */}
+                            <div className="flex flex-col items-center">
+                              <label className="text-[9px] font-orbitron font-bold text-slate-550 uppercase tracking-wider mb-1">
+                                {language === "fr" ? "Heures" : "Hours"}
+                              </label>
+                              <select
+                                value={coachingHours}
+                                onChange={(e) => setCoachingHours(parseInt(e.target.value))}
+                                className="bg-[#111128] border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-205 font-orbitron font-bold focus:outline-none focus:border-violet-500"
+                              >
+                                {Array.from({ length: 10 }, (_, i) => (
+                                  <option key={i} value={i}>{i}h</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="text-slate-650 font-bold self-end mb-1.5">:</div>
+                            {/* Minutes */}
+                            <div className="flex flex-col items-center">
+                              <label className="text-[9px] font-orbitron font-bold text-slate-555 uppercase tracking-wider mb-1">
+                                {language === "fr" ? "Minutes" : "Minutes"}
+                              </label>
+                              <select
+                                value={coachingMinutes}
+                                onChange={(e) => setCoachingMinutes(parseInt(e.target.value))}
+                                className="bg-[#111128] border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-205 font-orbitron font-bold focus:outline-none focus:border-violet-500"
+                              >
+                                {Array.from({ length: 60 }, (_, i) => (
+                                  <option key={i} value={i}>{i.toString().padStart(2, "0")}m</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="text-slate-650 font-bold self-end mb-1.5">:</div>
+                            {/* Seconds */}
+                            <div className="flex flex-col items-center">
+                              <label className="text-[9px] font-orbitron font-bold text-slate-555 uppercase tracking-wider mb-1">
+                                {language === "fr" ? "Secondes" : "Seconds"}
+                              </label>
+                              <select
+                                value={coachingSeconds}
+                                onChange={(e) => setCoachingSeconds(parseInt(e.target.value))}
+                                className="bg-[#111128] border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-205 font-orbitron font-bold focus:outline-none focus:border-violet-500"
+                              >
+                                {Array.from({ length: 60 }, (_, i) => (
+                                  <option key={i} value={i}>{i.toString().padStart(2, "0")}s</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          {/* Pace Preview Card */}
+                          <div className="bg-violet-950/10 border border-violet-900/30 rounded-xl p-3.5 space-y-2">
+                            <div className="text-[10px] font-orbitron font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                              <span>
+                                {coachingAnswers.sport === "Run"
+                                  ? (language === "fr" ? "Allure moyenne estimée :" : "Estimated average pace:")
+                                  : (language === "fr" ? "Vitesse moyenne estimée :" : "Estimated average speed:")
+                                }
+                              </span>
+                              <span className="text-violet-405 text-xs font-extrabold font-orbitron">
+                                {calculatedPace}
+                              </span>
+                            </div>
+                            
+                            <div className="border-t border-slate-900/40 my-1.5" />
+                            
+                            <div className="grid grid-cols-3 gap-2 text-center">
+                              <div className="bg-slate-950/30 p-1.5 rounded border border-slate-900/50">
+                                <div className="text-[8px] text-slate-500 uppercase tracking-wider font-bold">Easy</div>
+                                <div className="text-[10px] text-cyan-400 font-orbitron font-bold mt-0.5">{calculatedEasy}</div>
+                              </div>
+                              <div className="bg-slate-950/30 p-1.5 rounded border border-slate-900/50">
+                                <div className="text-[8px] text-slate-500 uppercase tracking-wider font-bold">Tempo</div>
+                                <div className="text-[10px] text-amber-500 font-orbitron font-bold mt-0.5">{calculatedTempo}</div>
+                              </div>
+                              <div className="bg-slate-950/30 p-1.5 rounded border border-slate-900/50">
+                                <div className="text-[8px] text-slate-500 uppercase tracking-wider font-bold">Intervals</div>
+                                <div className="text-[10px] text-violet-400 font-orbitron font-bold mt-0.5">{calculatedIntervals}</div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <Button
+                            variant="primary"
+                            onClick={() => {
+                              setCoachingAnswers((prev) => ({ ...prev, referencePace: calculatedPace }));
+                              setCoachingStep(5);
+                            }}
+                            className="w-full py-2 font-orbitron font-bold text-xs uppercase cursor-pointer"
+                          >
+                            {language === "fr" ? "Continuer" : "Continue"}
+                          </Button>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+
+                {/* 6. Questionnaire Step 4 (5): Target Goal Type */}
+                {coachingStep === 5 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setCoachingStep(4)}
+                        className="p-1 hover:bg-slate-900 rounded text-slate-400 cursor-pointer"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
                       <h4 className="text-xs font-orbitron font-extrabold text-slate-300 uppercase tracking-wider">
-                        {language === "fr" ? "4. Quel est votre but de performance ?" : "4. What is your goal type?"}
+                        {language === "fr" ? "5. Quel est votre but de performance ?" : "5. What is your goal type?"}
                       </h4>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
@@ -2149,7 +2818,7 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS age INTEGER;`}</pre>
                           type="button"
                           onClick={() => {
                             setCoachingAnswers((prev) => ({ ...prev, targetGoal: goal.id as any }));
-                            setCoachingStep(5);
+                            setCoachingStep(6);
                           }}
                           className={`p-3 rounded-xl border text-center font-orbitron font-bold text-xs transition-all cursor-pointer ${
                             coachingAnswers.targetGoal === goal.id
@@ -2166,19 +2835,19 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS age INTEGER;`}</pre>
                   </div>
                 )}
 
-                {/* 6. Questionnaire Step 5: Frequency */}
-                {coachingStep === 5 && (
+                {/* 7. Questionnaire Step 5 (6): Frequency */}
+                {coachingStep === 6 && (
                   <div className="space-y-4">
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setCoachingStep(4)}
+                        onClick={() => setCoachingStep(5)}
                         className="p-1 hover:bg-slate-900 rounded text-slate-400 cursor-pointer"
                       >
                         <ChevronLeft className="h-4 w-4" />
                       </button>
                       <h4 className="text-xs font-orbitron font-extrabold text-slate-300 uppercase tracking-wider">
-                        {language === "fr" ? "5. Combien de séances par semaine ?" : "5. How many workouts per week?"}
+                        {language === "fr" ? "6. Combien de séances par semaine ?" : "6. How many workouts per week?"}
                       </h4>
                     </div>
                     <div className="grid grid-cols-4 gap-3">
@@ -2188,7 +2857,7 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS age INTEGER;`}</pre>
                           type="button"
                           onClick={() => {
                             setCoachingAnswers((prev) => ({ ...prev, frequency: freq }));
-                            setCoachingStep(6);
+                            setCoachingStep(7);
                           }}
                           className={`p-3 rounded-xl border text-center font-orbitron font-black text-sm transition-all cursor-pointer ${
                             coachingAnswers.frequency === freq
@@ -2203,19 +2872,19 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS age INTEGER;`}</pre>
                   </div>
                 )}
 
-                {/* 7. Questionnaire Step 6: Weeks count */}
-                {coachingStep === 6 && (
+                {/* 8. Questionnaire Step 6 (7): Weeks count */}
+                {coachingStep === 7 && (
                   <div className="space-y-4">
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setCoachingStep(5)}
+                        onClick={() => setCoachingStep(6)}
                         className="p-1 hover:bg-slate-900 rounded text-slate-400 cursor-pointer"
                       >
                         <ChevronLeft className="h-4 w-4" />
                       </button>
                       <h4 className="text-xs font-orbitron font-extrabold text-slate-300 uppercase tracking-wider">
-                        {language === "fr" ? "6. Quelle durée de programme ?" : "6. Choose plan duration:"}
+                        {language === "fr" ? "7. Quelle durée de programme ?" : "7. Choose plan duration:"}
                       </h4>
                     </div>
                     <div className="flex flex-col gap-4">
@@ -2235,7 +2904,7 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS age INTEGER;`}</pre>
                           </button>
                         ))}
                       </div>
-
+ 
                       {coachingAnswers.weeksCount && (
                         <Button
                           variant="accent"
@@ -2314,8 +2983,31 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS age INTEGER;`}</pre>
                       const totalCount = selectedWeek.workouts.length;
                       const compPct = totalCount > 0 ? (completedCount / totalCount) : 0;
 
+                      const dateRange = getCoachingWeekDateRange(
+                        activeCoachingProgram.startedAt || new Date().toISOString(),
+                        activeWeekTab
+                      );
+                      const startStr = dateRange.start.toLocaleDateString(language === "fr" ? "fr-FR" : "en-US", { month: "short", day: "numeric" });
+                      const endStr = dateRange.end.toLocaleDateString(language === "fr" ? "fr-FR" : "en-US", { month: "short", day: "numeric" });
+
                       return (
                         <div className="space-y-4">
+                          <div className="flex items-center justify-between text-[10px] font-orbitron font-extrabold uppercase tracking-widest text-slate-400 bg-slate-950/20 p-2.5 rounded-lg border border-slate-900/60 flex-wrap gap-2 shadow-[0_0_8px_rgba(6,182,212,0.03)]">
+                            <span className="flex items-center gap-1">
+                              <span className="text-slate-500">📅</span>
+                              <span className="text-slate-300">{language === "fr" ? "Semaine du :" : "Week range:"}</span>
+                              <span className="text-violet-400">{startStr}</span>
+                              <span className="text-slate-550">{language === "fr" ? "au" : "to"}</span>
+                              <span className="text-violet-400">{endStr}</span>
+                            </span>
+                            {isCurrentWeek && remainingWeekTime && (
+                              <span className="text-cyan-400 font-black animate-pulse flex items-center gap-1">
+                                <span>⏳</span>
+                                <span>{remainingWeekTime}</span>
+                              </span>
+                            )}
+                          </div>
+
                           {selectedWeek.adaptationReport && (
                             <div className="p-2.5 bg-slate-950/30 border border-slate-900 rounded-lg text-[10px] text-slate-400 font-semibold leading-relaxed">
                               📢 <strong>{language === "fr" ? "Adaptation :" : "Adaptation:"}</strong> {selectedWeek.adaptationReport}
@@ -2942,7 +3634,7 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS age INTEGER;`}</pre>
       )}
 
       {/* Associate Workout Modal */}
-      {showAssociateModal && workoutToAssociate && coachingProgram && (
+      {showAssociateModal && workoutToAssociate && coachingProgram && dateRangeForModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <Card
             glowColor="cyan"
@@ -2988,6 +3680,12 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS age INTEGER;`}</pre>
                   <span>•</span>
                   <span>🪙 +{workoutToAssociate.goldReward} Or</span>
                 </div>
+                <div className="text-[9px] text-cyan-400/80 font-extrabold font-orbitron uppercase pt-1.5 border-t border-slate-900/40">
+                  📅 {language === "fr" ? "Séances admissibles du :" : "Eligible sessions from :"}{" "}
+                  {dateRangeForModal.start.toLocaleDateString(language === "fr" ? "fr-FR" : "en-US", { month: "short", day: "numeric" })}{" "}
+                  {language === "fr" ? "au" : "to"}{" "}
+                  {dateRangeForModal.end.toLocaleDateString(language === "fr" ? "fr-FR" : "en-US", { month: "short", day: "numeric" })}
+                </div>
               </div>
 
               <div className="space-y-2.5">
@@ -2995,83 +3693,59 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS age INTEGER;`}</pre>
                   {language === "fr" ? "Sélectionnez votre séance Strava sync :" : "Select your synchronized Strava workout:"}
                 </h4>
 
-                {(() => {
-                  const alreadyAssociatedIds = new Set<string>();
-                  coachingProgram.weeks.forEach(week => {
-                    week.workouts.forEach(w => {
-                      if (w.associatedWorkoutId) {
-                        alreadyAssociatedIds.add(w.associatedWorkoutId);
-                      }
-                    });
-                  });
+                {eligibleWorkoutsForModal.length === 0 ? (
+                  <div className="text-center p-8 bg-slate-950/20 border border-slate-900/40 rounded-xl space-y-2">
+                    <span className="text-2xl block">🚲</span>
+                    <p className="text-xs text-slate-500 leading-relaxed max-w-xs mx-auto">
+                      {language === "fr"
+                        ? `Aucune séance de type "${coachingProgram.sport}" disponible pour l'association. Synchronisez d'abord vos activités Strava depuis votre tableau de bord.`
+                        : `No logged workouts of type "${coachingProgram.sport}" available. Sync your Strava activities from the dashboard first.`}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    {eligibleWorkoutsForModal.map((logged) => {
+                      const date = new Date(logged.start_date).toLocaleDateString(
+                        language === "fr" ? "fr-FR" : "en-US",
+                        { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }
+                      );
 
-                  const eligible = workouts.filter(w => {
-                    if (alreadyAssociatedIds.has(w.id)) return false;
-                    const sport = coachingProgram.sport;
-                    if (sport === "Run") return w.activity_type === "Run";
-                    if (sport === "Ride") return w.activity_type === "Ride";
-                    if (sport === "Walk") return w.activity_type === "Walk" || w.activity_type === "Hike";
-                    return false;
-                  });
-
-                  if (eligible.length === 0) {
-                    return (
-                      <div className="text-center p-8 bg-slate-950/20 border border-slate-900/40 rounded-xl space-y-2">
-                        <span className="text-2xl block">🚲</span>
-                        <p className="text-xs text-slate-500 leading-relaxed max-w-xs mx-auto">
-                          {language === "fr"
-                            ? `Aucune séance de type "${coachingProgram.sport}" disponible pour l'association. Synchronisez d'abord vos activités Strava depuis votre tableau de bord.`
-                            : `No logged workouts of type "${coachingProgram.sport}" available. Sync your Strava activities from the dashboard first.`}
-                        </p>
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                      {eligible.map((logged) => {
-                        const date = new Date(logged.start_date).toLocaleDateString(
-                          language === "fr" ? "fr-FR" : "en-US",
-                          { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }
-                        );
-
-                        return (
-                          <div
-                            key={logged.id}
-                            className="p-3 bg-slate-950/40 border border-slate-900 rounded-xl hover:border-cyan-500/35 transition flex items-center justify-between gap-3"
-                          >
-                            <div className="space-y-0.5">
-                              <span className="block font-orbitron font-extrabold text-[11px] text-slate-200 uppercase tracking-wide">
-                                {logged.name}
-                              </span>
-                              <div className="flex items-center gap-2 text-[9px] text-slate-550 font-semibold font-orbitron">
-                                <span>📅 {date}</span>
-                                <span>•</span>
-                                <span className="text-cyan-400">{logged.distance} km</span>
-                                {logged.elevation_gain > 0 && (
-                                  <>
-                                    <span>•</span>
-                                    <span className="text-rose-400">+{logged.elevation_gain}m</span>
-                                  </>
-                                )}
-                              </div>
+                      return (
+                        <div
+                          key={logged.id}
+                          className="p-3 bg-slate-950/40 border border-slate-900 rounded-xl hover:border-cyan-500/35 transition flex items-center justify-between gap-3"
+                        >
+                          <div className="space-y-0.5">
+                            <span className="block font-orbitron font-extrabold text-[11px] text-slate-200 uppercase tracking-wide">
+                              {logged.name}
+                            </span>
+                            <div className="flex items-center gap-2 text-[9px] text-slate-550 font-semibold font-orbitron">
+                              <span>📅 {date}</span>
+                              <span>•</span>
+                              <span className="text-cyan-400">{logged.distance} km</span>
+                              {logged.elevation_gain > 0 && (
+                                <>
+                                  <span>•</span>
+                                  <span className="text-rose-400">+{logged.elevation_gain}m</span>
+                                </>
+                              )}
                             </div>
-
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="sm"
-                              className="text-[9px] px-3 font-orbitron font-bold h-7 uppercase"
-                              onClick={() => handleAssociateWorkout(workoutToAssociate.id, logged.id)}
-                            >
-                              {language === "fr" ? "Choisir" : "Choose"}
-                            </Button>
                           </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })()}
+
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            className="text-[9px] px-3 font-orbitron font-bold h-7 uppercase"
+                            onClick={() => handleAssociateWorkout(workoutToAssociate.id, logged.id)}
+                          >
+                            {language === "fr" ? "Choisir" : "Choose"}
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 

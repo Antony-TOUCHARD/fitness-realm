@@ -201,6 +201,7 @@ export type CoachingAnswers = {
   targetGoal: 'finish' | 'time_performance'
   frequency: number
   weeksCount: 4 | 8 | 12
+  referencePace?: string
 }
 
 export type PlannedWorkout = {
@@ -242,6 +243,7 @@ export type CoachingProgram = {
   }
   weeks: CoachingWeek[]
   claimed: boolean
+  startedAt?: string
 }
 
 

@@ -29,6 +29,170 @@ export default function Dashboard() {
 
   const isDemo = isDemoMode();
 
+  const getCoachingWeekDateRange = (startedAtStr: string, weekNumber: number) => {
+    const startedAt = new Date(startedAtStr);
+    const startDayOfWeek = startedAt.getUTCDay(); // 0 = Sunday, 1 = Monday, ...
+    
+    // We want the end of the first week to be the first Monday 00:00:00 UTC after startedAt.
+    // If startedAt is Monday (1), days until next Monday (1) is 7 days.
+    // If startedAt is Sunday (0), days until next Monday (1) is 1 day.
+    // If startedAt is Wednesday (3), days until next Monday (1) is 5 days (8 - 3).
+    const daysUntilFirstMonday = startDayOfWeek === 0 ? 1 : 8 - startDayOfWeek;
+    
+    const firstMonday = new Date(startedAt);
+    firstMonday.setUTCDate(startedAt.getUTCDate() + daysUntilFirstMonday);
+    firstMonday.setUTCHours(0, 0, 0, 0);
+
+    if (weekNumber === 1) {
+      return {
+        start: startedAt,
+        end: firstMonday,
+      };
+    } else {
+      const weekStart = new Date(firstMonday);
+      weekStart.setUTCDate(firstMonday.getUTCDate() + (weekNumber - 2) * 7);
+      
+      const weekEnd = new Date(weekStart);
+      weekEnd.setUTCDate(weekStart.getUTCDate() + 7);
+      
+      return {
+        start: weekStart,
+        end: weekEnd,
+      };
+    }
+  };
+
+  const autoCloseWeekIfNeeded = (program: CoachingProgram, userId: string) => {
+    if (!program || !Array.isArray(program.weeks)) return null;
+
+    let currentProgram = { ...program };
+    let hasChanges = false;
+    const now = new Date();
+
+    while (true) {
+      const startedAtVal = currentProgram.startedAt || new Date().toISOString();
+      const currentWeekNum = currentProgram.currentWeekIndex + 1;
+      
+      const range = getCoachingWeekDateRange(startedAtVal, currentWeekNum);
+
+      if (now > range.end) {
+        const currentWeek = currentProgram.weeks[currentProgram.currentWeekIndex];
+        
+        // If the week index is already pointing to a week that has already been closed/processed
+        // (i.e. status !== 'pending'), we just advance the index without re-running adaptation logic.
+        if (currentWeek.status !== 'pending') {
+          const isLastWeek = currentProgram.currentWeekIndex === currentProgram.weeks.length - 1;
+          if (!isLastWeek) {
+            currentProgram = {
+              ...currentProgram,
+              currentWeekIndex: currentProgram.currentWeekIndex + 1,
+              claimed: false,
+            };
+            hasChanges = true;
+            continue; // evaluate next week
+          }
+          break; // reached end of program
+        }
+
+        // If status is pending, we close it based on completion rate
+        const totalWorkouts = currentWeek.workouts.length;
+        const completedWorkouts = currentWeek.workouts.filter((w) => w.completed).length;
+        const completionRate = completedWorkouts / totalWorkouts;
+
+        let weekStatus: 'completed' | 'partial' | 'failed' = 'partial';
+        let report = "";
+
+        if (completionRate === 1.0) {
+          weekStatus = 'completed';
+          report = language === "fr"
+            ? "Clôture automatique : Semaine complétée à 100%. Surcharge progressive appliquée : volume augmenté de +10% pour la semaine suivante."
+            : "Auto-close: Week completed at 100%. Progressive overload applied: volume increased by +10% for the next week.";
+        } else if (completionRate >= 0.5) {
+          weekStatus = 'partial';
+          report = language === "fr"
+            ? "Clôture automatique : Semaine partiellement complétée. Volume stabilisé pour la semaine suivante."
+            : "Auto-close: Week partially completed. Volume stabilized for the next week.";
+        } else {
+          weekStatus = 'failed';
+          report = language === "fr"
+            ? "Clôture automatique : Semaine incomplète. Volume de la semaine suivante réduit de -10% pour récupération et entraînements non complétés reportés."
+            : "Auto-close: Week incomplete. Next week volume reduced by -10% for recovery, and incomplete sessions rolled over.";
+        }
+
+        const updatedWeeks = currentProgram.weeks.map((week, idx) => {
+          if (idx === currentProgram.currentWeekIndex) {
+            return {
+              ...week,
+              status: weekStatus,
+              adaptationReport: report,
+            };
+          }
+          
+          // Apply negative adaptation (failed week: -10% target volume + rollover incomplete workouts)
+          if (weekStatus === 'failed' && idx === currentProgram.currentWeekIndex + 1) {
+            const incompleteWorkouts = currentWeek.workouts
+              .filter((w) => !w.completed)
+              .map((w) => ({
+                ...w,
+                id: `${w.id}-rollover`,
+                name: `${w.name} (Reporté)`,
+                completed: false,
+                associatedWorkoutId: null,
+                paceAccuracy: null,
+              }));
+
+            const adaptedNextWorkouts = week.workouts.map((w) => {
+              return {
+                ...w,
+                targetDistance: w.targetDistance ? Math.round(w.targetDistance * 0.9 * 10) / 10 : null,
+                targetDuration: w.targetDuration ? Math.round(w.targetDuration * 0.9) : null,
+              };
+            });
+
+            return {
+              ...week,
+              workouts: [...adaptedNextWorkouts, ...incompleteWorkouts],
+            };
+          }
+
+          // Apply positive adaptation (completed week: +10% target volume)
+          if (weekStatus === 'completed' && idx === currentProgram.currentWeekIndex + 1) {
+            const adaptedNextWorkouts = week.workouts.map((w) => {
+              return {
+                ...w,
+                targetDistance: w.targetDistance ? Math.round(w.targetDistance * 1.1 * 10) / 10 : null,
+                targetDuration: w.targetDuration ? Math.round(w.targetDuration * 1.1) : null,
+              };
+            });
+            return {
+              ...week,
+              workouts: adaptedNextWorkouts,
+            };
+          }
+
+          return week;
+        });
+
+        const isLastWeek = currentProgram.currentWeekIndex === currentProgram.weeks.length - 1;
+        const nextWeekIndex = isLastWeek ? currentProgram.currentWeekIndex : currentProgram.currentWeekIndex + 1;
+
+        currentProgram = {
+          ...currentProgram,
+          currentWeekIndex: nextWeekIndex,
+          weeks: updatedWeeks,
+          claimed: false,
+        };
+        hasChanges = true;
+
+        if (isLastWeek) break;
+      } else {
+        break; // Current week deadline not yet passed
+      }
+    }
+
+    return hasChanges ? currentProgram : null;
+  };
+
   const getWorkoutWeekOffset = React.useCallback((startDateStr: string) => {
     const refDate = isDemo ? new Date("2026-06-18T23:59:59Z") : new Date();
     const startDate = new Date(startDateStr);
@@ -147,7 +311,13 @@ export default function Dashboard() {
         if (programRaw) {
           try {
             const parsed = JSON.parse(programRaw);
-            setCoachingProgram(parsed);
+            const autoClosed = autoCloseWeekIfNeeded(parsed, activeProfile.id);
+            if (autoClosed) {
+              setCoachingProgram(autoClosed);
+              localStorage.setItem(programKey, JSON.stringify(autoClosed));
+            } else {
+              setCoachingProgram(parsed);
+            }
           } catch {
             setCoachingProgram(null);
           }
@@ -219,7 +389,7 @@ export default function Dashboard() {
             .maybeSingle();
 
           if (coachingData) {
-            setCoachingProgram({
+            const programLoaded: CoachingProgram = {
               name: coachingData.name,
               sport: coachingData.sport as any,
               planType: coachingData.plan_type,
@@ -227,7 +397,25 @@ export default function Dashboard() {
               targetPaces: coachingData.target_paces as any,
               weeks: coachingData.weeks_data as any,
               claimed: coachingData.claimed,
-            });
+              startedAt: coachingData.created_at,
+            };
+            const autoClosed = autoCloseWeekIfNeeded(programLoaded, user.id);
+            if (autoClosed) {
+              setCoachingProgram(autoClosed);
+              supabase
+                .from("coaching_programs")
+                .update({
+                  current_week_index: autoClosed.currentWeekIndex,
+                  weeks_data: autoClosed.weeks,
+                  claimed: autoClosed.claimed,
+                })
+                .eq("user_id", user.id)
+                .then(({ error }) => {
+                  if (error) console.error("Error saving auto-closed program to DB:", error);
+                });
+            } else {
+              setCoachingProgram(programLoaded);
+            }
           } else {
             setCoachingProgram(null);
           }
