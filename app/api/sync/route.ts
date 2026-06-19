@@ -299,7 +299,7 @@ export async function POST(request: Request) {
         .eq("id", user.id);
     }
 
-    // Retroactive repair for older workouts lacking duration or polyline data
+    // Retroactive repair for older workouts lacking duration, polyline data, or heartrate data
     try {
       let workoutsToFix = [];
       let durationColumnSupported = true;
@@ -309,18 +309,18 @@ export async function POST(request: Request) {
           .from("workouts")
           .select("id, strava_activity_id")
           .eq("user_id", user.id)
-          .or("duration.is.null,summary_polyline.is.null");
+          .or("duration.is.null,summary_polyline.is.null,avg_heartrate.is.null");
         
         if (error) throw error;
         workoutsToFix = data || [];
       } catch (err) {
-        console.warn("Failed to query duration column for repair, falling back to checking only summary_polyline:", err);
+        console.warn("Failed to query duration column for repair, falling back to checking summary_polyline and avg_heartrate:", err);
         durationColumnSupported = false;
         const { data } = await supabase
           .from("workouts")
           .select("id, strava_activity_id")
           .eq("user_id", user.id)
-          .is("summary_polyline", null);
+          .or("summary_polyline.is.null,avg_heartrate.is.null");
         workoutsToFix = data || [];
       }
 
@@ -340,6 +340,7 @@ export async function POST(request: Request) {
                       .update({
                         duration: fullActivity.moving_time,
                         summary_polyline: fullActivity.map?.summary_polyline || null,
+                        avg_heartrate: fullActivity.average_heartrate || null,
                       })
                       .eq("id", w.id);
                   } catch (updateErr) {
@@ -348,6 +349,7 @@ export async function POST(request: Request) {
                       .from("workouts")
                       .update({
                         summary_polyline: fullActivity.map?.summary_polyline || null,
+                        avg_heartrate: fullActivity.average_heartrate || null,
                       })
                       .eq("id", w.id);
                   }
@@ -356,6 +358,7 @@ export async function POST(request: Request) {
                     .from("workouts")
                     .update({
                       summary_polyline: fullActivity.map?.summary_polyline || null,
+                      avg_heartrate: fullActivity.average_heartrate || null,
                     })
                     .eq("id", w.id);
                 }

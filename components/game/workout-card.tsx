@@ -16,6 +16,34 @@ export function WorkoutCard({ workout, onClick }: WorkoutCardProps) {
   const [revealed, setRevealed] = useState(false);
   const { t, language } = useLanguage();
 
+  const effectiveDuration = workout.duration && workout.duration > 0 ? workout.duration : null;
+
+  const formatDuration = (seconds: number | null): string => {
+    if (seconds === null) return "--";
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    if (hrs > 0) {
+      return `${hrs}h ${mins.toString().padStart(2, "0")}m`;
+    }
+    return `${mins}m ${secs.toString().padStart(2, "0")}s`;
+  };
+
+  const formatSpeedOrPace = (w: Workout, durationSec: number | null): string => {
+    if (durationSec === null || !w.distance || w.distance <= 0) {
+      return "--";
+    }
+    if (w.activity_type === "Run") {
+      const secondsPerKm = durationSec / w.distance;
+      const mins = Math.floor(secondsPerKm / 60);
+      const secs = Math.round(secondsPerKm % 60);
+      return `${mins}:${secs.toString().padStart(2, "0")} min/km`;
+    } else {
+      const speedKmh = w.distance / (durationSec / 3600);
+      return `${speedKmh.toFixed(1)} km/h`;
+    }
+  };
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setRevealed(true);
@@ -128,6 +156,18 @@ export function WorkoutCard({ workout, onClick }: WorkoutCardProps) {
             <span className="text-slate-500">{language === "fr" ? "Dist :" : "Dist:"}</span>
             <span className="font-semibold text-slate-200">{workout.distance.toFixed(2)} km</span>
           </div>
+          {effectiveDuration && (
+            <div className="flex items-center gap-1">
+              <span className="text-slate-500">{language === "fr" ? "Durée :" : "Time:"}</span>
+              <span className="font-semibold text-slate-200">{formatDuration(effectiveDuration)}</span>
+            </div>
+          )}
+          {effectiveDuration && (
+            <div className="flex items-center gap-1">
+              <span className="text-slate-500">{workout.activity_type === "Run" ? (language === "fr" ? "Allure :" : "Pace:") : (language === "fr" ? "Vit :" : "Speed:")}</span>
+              <span className="font-semibold text-slate-200">{formatSpeedOrPace(workout, effectiveDuration)}</span>
+            </div>
+          )}
           <div className="flex items-center gap-1">
             <TrendingUp className="h-4 w-4 text-rose-500" />
             <span className="font-semibold text-slate-200">{workout.elevation_gain} m</span>

@@ -33,6 +33,32 @@ export function PublicProfileModal({ userId, isOpen, onClose }: PublicProfileMod
   const [equippedBorder, setEquippedBorder] = useState<string | null>(null);
   const [equippedCompanion, setEquippedCompanion] = useState<string | null>(null);
 
+  const formatDuration = (seconds: number | null): string => {
+    if (seconds === null) return "";
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    if (hrs > 0) {
+      return `${hrs}h ${mins.toString().padStart(2, "0")}m`;
+    }
+    return `${mins}m ${secs.toString().padStart(2, "0")}s`;
+  };
+
+  const formatSpeedOrPace = (w: Workout, durationSec: number | null): string => {
+    if (durationSec === null || !w.distance || w.distance <= 0) {
+      return "";
+    }
+    if (w.activity_type === "Run") {
+      const secondsPerKm = durationSec / w.distance;
+      const mins = Math.floor(secondsPerKm / 60);
+      const secs = Math.round(secondsPerKm % 60);
+      return `${mins}:${secs.toString().padStart(2, "0")} min/km`;
+    } else {
+      const speedKmh = w.distance / (durationSec / 3600);
+      return `${speedKmh.toFixed(1)} km/h`;
+    }
+  };
+
   useEffect(() => {
     if (!userId || !isOpen) return;
     const activeId = userId;
@@ -329,6 +355,13 @@ export function PublicProfileModal({ userId, isOpen, onClose }: PublicProfileMod
                       month: "short"
                     });
 
+                    const wDuration = w.duration && w.duration > 0 ? w.duration : null;
+                    const durationText = formatDuration(wDuration);
+                    const speedText = formatSpeedOrPace(w, wDuration);
+                    
+                    const heartRateText = w.avg_heartrate ? ` • ❤️ ${Math.round(w.avg_heartrate)} bpm` : "";
+                    const durationPaceText = durationText ? ` • ⏱️ ${durationText}${speedText ? ` (${speedText})` : ""}` : "";
+
                     return (
                       <div
                         key={w.id}
@@ -343,8 +376,8 @@ export function PublicProfileModal({ userId, isOpen, onClose }: PublicProfileMod
                             <span className="block font-orbitron font-extrabold text-xs text-slate-200 uppercase leading-snug">
                               {w.name}
                             </span>
-                            <span className="block text-[10px] text-slate-500 font-semibold mt-0.5">
-                              {sportLabel} • {wDate}
+                            <span className="block text-[10px] text-slate-500 font-semibold mt-0.5 whitespace-normal break-all">
+                              {sportLabel} • {wDate}{durationPaceText}{heartRateText}
                             </span>
                           </div>
                         </div>
