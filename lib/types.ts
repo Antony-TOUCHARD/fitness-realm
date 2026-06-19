@@ -52,6 +52,7 @@ export type Workout = {
   processed_at: string
   territory_id: string | null
   summary_polyline: string | null
+  duration?: number | null
   coordinates?: [number, number][]
   city_id?: string
   neighborhood_id?: string
@@ -214,6 +215,10 @@ export type PlannedWorkout = {
   completed: boolean
   associatedWorkoutId: string | null
   paceAccuracy: number | null
+  actualDistance?: number | null
+  actualDuration?: number | null
+  actualPace?: string | null
+  coachFeedback?: string | null
   xpReward: number
   goldReward: number
 }

@@ -179,6 +179,7 @@ export async function POST(request: Request) {
             start_date: activity.start_date,
             territory_id: territoryId,
             summary_polyline: activity.map?.summary_polyline || null,
+            duration: activity.moving_time,
           })
           .select()
           .single();

@@ -27,31 +27,18 @@ export default function LandingPage() {
 
     async function fetchAndSetStats(supabase: any) {
       try {
-        // 1. Count active heroes
-        const { count: heroesCount } = await supabase
-          .from("profiles")
-          .select("*", { count: "exact", head: true });
+        const { data, error } = await supabase.rpc("get_global_stats");
+        if (error) throw error;
 
-        // 2. Sum workouts stats (distance and XP)
-        const { data: workoutsData } = await supabase
-          .from("workouts")
-          .select("distance, xp_gained");
-
-        // 3. Count conquered territories
-        const { data: territoriesData } = await supabase
-          .from("territories")
-          .select("controlling_faction");
-
-        const totalDist = workoutsData?.reduce((sum: number, w: any) => sum + Number(w.distance), 0) || 0;
-        const totalXP = workoutsData?.reduce((sum: number, w: any) => sum + Number(w.xp_gained), 0) || 0;
-        const terrsCount = territoriesData?.filter((t: any) => t.controlling_faction !== "Neutral").length || 0;
-
-        setStats({
-          activeHeroes: heroesCount || 0,
-          xpEarned: totalXP,
-          kmTraveled: Math.round(totalDist * 10) / 10,
-          territoriesHeld: terrsCount,
-        });
+        if (data && data[0]) {
+          const row = data[0];
+          setStats({
+            activeHeroes: Number(row.active_heroes || 0),
+            xpEarned: Number(row.xp_earned || 0),
+            kmTraveled: Math.round(Number(row.km_traveled || 0) * 10) / 10,
+            territoriesHeld: Number(row.territories_held || 0),
+          });
+        }
       } catch (err) {
         console.error("Error fetching stats update:", err);
       }

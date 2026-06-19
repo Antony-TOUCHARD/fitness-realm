@@ -114,27 +114,64 @@ export default function ProfilePage() {
     if (!profile) return;
     const profileId = profile.id;
 
-    if (type === "title") {
-      if (value) {
-        localStorage.setItem(`fitness-realm-equipped-title-${profileId}`, value);
-      } else {
-        localStorage.removeItem(`fitness-realm-equipped-title-${profileId}`);
+    let itemId: string | null = null;
+    if (value) {
+      if (type === "title") {
+        const item = titlesList.find((t) => t.value === value);
+        if (item) itemId = item.id;
+      } else if (type === "border") {
+        const item = bordersList.find((b) => b.value === value);
+        if (item) itemId = item.id;
+      } else if (type === "companion") {
+        const item = companionsList.find((c) => c.value === value);
+        if (item) itemId = item.id;
       }
+    }
+
+    if (type === "title") {
       setEquippedTitle(value);
     } else if (type === "border") {
-      if (value) {
-        localStorage.setItem(`fitness-realm-equipped-border-${profileId}`, value);
-      } else {
-        localStorage.removeItem(`fitness-realm-equipped-border-${profileId}`);
-      }
       setEquippedBorder(value);
     } else if (type === "companion") {
-      if (value) {
-        localStorage.setItem(`fitness-realm-equipped-companion-${profileId}`, value);
-      } else {
-        localStorage.removeItem(`fitness-realm-equipped-companion-${profileId}`);
-      }
       setEquippedCompanion(value);
+    }
+
+    if (isDemo) {
+      if (type === "title") {
+        if (value) localStorage.setItem(`fitness-realm-equipped-title-${profileId}`, value);
+        else localStorage.removeItem(`fitness-realm-equipped-title-${profileId}`);
+      } else if (type === "border") {
+        if (value) localStorage.setItem(`fitness-realm-equipped-border-${profileId}`, value);
+        else localStorage.removeItem(`fitness-realm-equipped-border-${profileId}`);
+      } else if (type === "companion") {
+        if (value) localStorage.setItem(`fitness-realm-equipped-companion-${profileId}`, value);
+        else localStorage.removeItem(`fitness-realm-equipped-companion-${profileId}`);
+      }
+    } else {
+      async function updateDBCosmetics() {
+        try {
+          const { createClient } = await import("@/lib/supabase/client");
+          const supabase = createClient();
+          const prefix = type === "title" ? "title-%" : type === "border" ? "border-%" : "companion-%";
+          
+          await supabase
+            .from("unlocked_cosmetics")
+            .update({ equipped: false })
+            .eq("user_id", profileId)
+            .like("item_id", prefix);
+
+          if (itemId) {
+            await supabase
+              .from("unlocked_cosmetics")
+              .update({ equipped: true })
+              .eq("user_id", profileId)
+              .eq("item_id", itemId);
+          }
+        } catch (err) {
+          console.error("Failed to update database equipped cosmetic:", err);
+        }
+      }
+      updateDBCosmetics();
     }
 
     window.dispatchEvent(new Event("fitness-realm-profile-updated"));
@@ -224,6 +261,12 @@ export default function ProfilePage() {
     async function getProfileData() {
       let activeProfile: Profile | null = null;
       let activeWorkouts: Workout[] = [];
+      let dbUnlocked: string[] = [];
+      let dbEquippedTitle: string | null = null;
+      let dbEquippedBorder: string | null = null;
+      let dbEquippedCompanion: string | null = null;
+      let dbCoaching: CoachingProgram | null = null;
+      let dbBonusExpires: number | null = null;
 
       if (isDemo) {
         activeProfile = { ...demoProfile };
@@ -247,13 +290,72 @@ export default function ProfilePage() {
               .select("*")
               .eq("user_id", user.id);
             if (workoutsData) activeWorkouts = workoutsData;
+
+            const { data: cosmeticsData } = await supabase
+              .from("unlocked_cosmetics")
+              .select("item_id, equipped")
+              .eq("user_id", user.id);
+            
+            if (cosmeticsData) {
+              dbUnlocked = cosmeticsData.map(c => c.item_id);
+              
+              const eqTitleItem = cosmeticsData.find(c => c.equipped && c.item_id.startsWith("title-"));
+              if (eqTitleItem) {
+                const titleObj = titlesList.find(t => t.id === eqTitleItem.item_id);
+                if (titleObj) dbEquippedTitle = titleObj.value;
+              }
+
+              const eqBorderItem = cosmeticsData.find(c => c.equipped && c.item_id.startsWith("border-"));
+              if (eqBorderItem) {
+                const borderObj = bordersList.find(b => b.id === eqBorderItem.item_id);
+                if (borderObj) dbEquippedBorder = borderObj.value;
+              }
+
+              const eqCompanionItem = cosmeticsData.find(c => c.equipped && c.item_id.startsWith("companion-"));
+              if (eqCompanionItem) {
+                const companionObj = companionsList.find(c => c.id === eqCompanionItem.item_id);
+                if (companionObj) dbEquippedCompanion = companionObj.value;
+              }
+            }
+
+            const { data: coachingData } = await supabase
+              .from("coaching_programs")
+              .select("*")
+              .eq("user_id", user.id)
+              .maybeSingle();
+            
+            if (coachingData) {
+              dbCoaching = {
+                name: coachingData.name,
+                sport: coachingData.sport as any,
+                planType: coachingData.plan_type,
+                currentWeekIndex: coachingData.current_week_index,
+                targetPaces: coachingData.target_paces as any,
+                weeks: coachingData.weeks_data as any,
+                claimed: coachingData.claimed,
+              };
+            }
+
+            const { data: boostData } = await supabase
+              .from("active_boosts")
+              .select("*")
+              .eq("user_id", user.id)
+              .maybeSingle();
+            
+            if (boostData) {
+              const exp = new Date(boostData.expires_at).getTime();
+              if (exp > Date.now()) {
+                dbBonusExpires = exp;
+              } else {
+                await supabase.from("active_boosts").delete().eq("user_id", user.id);
+              }
+            }
           }
         } catch (err) {
           console.error("Error fetching live profile:", err);
         }
       }
 
-      // Apply local storage overrides if present (useful for fallback or testing)
       if (activeProfile) {
         const fallbackKey = `fitness-realm-profile-fallback-${activeProfile.id}`;
         const fallbackRaw = localStorage.getItem(fallbackKey);
@@ -268,61 +370,63 @@ export default function ProfilePage() {
               age: fallback.age !== undefined ? fallback.age : activeProfile.age,
               gold: fallback.gold !== undefined ? fallback.gold : activeProfile.gold,
             };
-            
-            // If the local storage contains extra fields, we might have seen database warnings before
-            const warnedBefore = localStorage.getItem(`fitness-realm-db-warned-${activeProfile.id}`);
-            if (warnedBefore === "true") {
-              setDbWarning(true);
-            }
-          } catch (e) {
-            console.error("Error loading profile overrides:", e);
-          }
-        }
-
-        // Fetch equipped title, border, and companion
-        setEquippedTitle(localStorage.getItem(`fitness-realm-equipped-title-${activeProfile.id}`) || null);
-        setEquippedBorder(localStorage.getItem(`fitness-realm-equipped-border-${activeProfile.id}`) || null);
-        setEquippedCompanion(localStorage.getItem(`fitness-realm-equipped-companion-${activeProfile.id}`) || null);
-
-        // Load unlocked items from LocalStorage
-        const unlockedKey = `fitness-realm-unlocked-${activeProfile.id}`;
-        const unlockedRaw = localStorage.getItem(unlockedKey);
-        if (unlockedRaw) {
-          try {
-            setUnlockedItems(JSON.parse(unlockedRaw));
           } catch {}
-        } else {
-          const defaultUnlocked = ["title-recruit"];
-          localStorage.setItem(unlockedKey, JSON.stringify(defaultUnlocked));
-          setUnlockedItems(defaultUnlocked);
         }
+      }
 
-        // Load coaching program from LocalStorage
-        const programKey = `fitness-realm-coaching-program-${activeProfile.id}`;
-        const programRaw = localStorage.getItem(programKey);
-        if (programRaw) {
-          try {
-            const parsed = JSON.parse(programRaw);
-            setCoachingProgram(parsed);
-            setActiveWeekTab(parsed.currentWeekIndex + 1);
-          } catch {}
-        } else {
-          setCoachingProgram(null);
-        }
+      if (activeProfile) {
+        if (isDemo) {
+          setEquippedTitle(localStorage.getItem(`fitness-realm-equipped-title-${activeProfile.id}`) || null);
+          setEquippedBorder(localStorage.getItem(`fitness-realm-equipped-border-${activeProfile.id}`) || null);
+          setEquippedCompanion(localStorage.getItem(`fitness-realm-equipped-companion-${activeProfile.id}`) || null);
 
-        // Load bonus expiration from LocalStorage
-        const bonusKey = `fitness-realm-coaching-bonus-expires-${activeProfile.id}`;
-        const bonusRaw = localStorage.getItem(bonusKey);
-        if (bonusRaw) {
-          const exp = Number(bonusRaw);
-          if (exp > Date.now()) {
-            setBonusExpires(exp);
+          const unlockedKey = `fitness-realm-unlocked-${activeProfile.id}`;
+          const unlockedRaw = localStorage.getItem(unlockedKey);
+          if (unlockedRaw) {
+            try {
+              setUnlockedItems(JSON.parse(unlockedRaw));
+            } catch {}
           } else {
-            localStorage.removeItem(bonusKey);
+            const defaultUnlocked = ["title-recruit"];
+            localStorage.setItem(unlockedKey, JSON.stringify(defaultUnlocked));
+            setUnlockedItems(defaultUnlocked);
+          }
+
+          const programKey = `fitness-realm-coaching-program-${activeProfile.id}`;
+          const programRaw = localStorage.getItem(programKey);
+          if (programRaw) {
+            try {
+              const parsed = JSON.parse(programRaw);
+              setCoachingProgram(parsed);
+              setActiveWeekTab(parsed.currentWeekIndex + 1);
+            } catch {}
+          } else {
+            setCoachingProgram(null);
+          }
+
+          const bonusKey = `fitness-realm-coaching-bonus-expires-${activeProfile.id}`;
+          const bonusRaw = localStorage.getItem(bonusKey);
+          if (bonusRaw) {
+            const exp = Number(bonusRaw);
+            if (exp > Date.now()) {
+              setBonusExpires(exp);
+            } else {
+              localStorage.removeItem(bonusKey);
+              setBonusExpires(null);
+            }
+          } else {
             setBonusExpires(null);
           }
         } else {
-          setBonusExpires(null);
+          setEquippedTitle(dbEquippedTitle);
+          setEquippedBorder(dbEquippedBorder);
+          setEquippedCompanion(dbEquippedCompanion);
+          setUnlockedItems(dbUnlocked.length > 0 ? dbUnlocked : ["title-recruit"]);
+          setCoachingProgram(dbCoaching);
+          if (dbCoaching) {
+            setActiveWeekTab(dbCoaching.currentWeekIndex + 1);
+          }
+          setBonusExpires(dbBonusExpires);
         }
       }
 
@@ -381,6 +485,7 @@ export default function ProfilePage() {
 
   const handleSubmitQuestionnaire = () => {
     if (!profile) return;
+    const profileId = profile.id;
     const { sport, planType, currentCapacity, targetGoal, frequency, weeksCount } = coachingAnswers;
     if (!sport || !planType || !currentCapacity || !targetGoal || !frequency || !weeksCount) return;
 
@@ -614,36 +719,84 @@ export default function ProfilePage() {
       claimed: false,
     };
 
-    const programKey = `fitness-realm-coaching-program-${profile.id}`;
-    localStorage.setItem(programKey, JSON.stringify(newProgram));
+    const programKey = `fitness-realm-coaching-program-${profileId}`;
     setCoachingProgram(newProgram);
     setCoachingStep(0);
     setActiveWeekTab(1);
+
+    if (!isDemo) {
+      async function saveProgramToDB() {
+        try {
+          const { createClient } = await import("@/lib/supabase/client");
+          const supabase = createClient();
+          await supabase
+            .from("coaching_programs")
+            .upsert({
+              user_id: profileId,
+              name: newProgram.name,
+              sport: newProgram.sport,
+              plan_type: newProgram.planType,
+              current_week_index: newProgram.currentWeekIndex,
+              target_paces: newProgram.targetPaces,
+              weeks_data: newProgram.weeks,
+              claimed: newProgram.claimed,
+            });
+        } catch (err) {
+          console.error("Failed to save coaching program to database:", err);
+        }
+      }
+      saveProgramToDB();
+    } else {
+      localStorage.setItem(programKey, JSON.stringify(newProgram));
+    }
   };
+
 
   const handleClaimCoachingBonus = () => {
     if (!profile || !coachingProgram) return;
+    const profileId = profile.id;
 
-    // Set expiration in LocalStorage to 72 hours from now
     const expiresAt = Date.now() + 72 * 60 * 60 * 1000;
-    const bonusKey = `fitness-realm-coaching-bonus-expires-${profile.id}`;
-    localStorage.setItem(bonusKey, String(expiresAt));
-    setBonusExpires(expiresAt);
-
-    // Mark current week as claimed
-    const programKey = `fitness-realm-coaching-program-${profile.id}`;
+    const bonusKey = `fitness-realm-coaching-bonus-expires-${profileId}`;
+    const programKey = `fitness-realm-coaching-program-${profileId}`;
     const updatedProgram = {
       ...coachingProgram,
       claimed: true,
     };
-    localStorage.setItem(programKey, JSON.stringify(updatedProgram));
+    setBonusExpires(expiresAt);
     setCoachingProgram(updatedProgram);
+
+    if (!isDemo) {
+      async function saveClaimToDB() {
+        try {
+          const { createClient } = await import("@/lib/supabase/client");
+          const supabase = createClient();
+          await supabase
+            .from("active_boosts")
+            .upsert({
+              user_id: profileId,
+              expires_at: new Date(expiresAt).toISOString(),
+            });
+          await supabase
+            .from("coaching_programs")
+            .update({ claimed: true })
+            .eq("user_id", profileId);
+        } catch (err) {
+          console.error("Failed to save claim to database:", err);
+        }
+      }
+      saveClaimToDB();
+    } else {
+      localStorage.setItem(bonusKey, String(expiresAt));
+      localStorage.setItem(programKey, JSON.stringify(updatedProgram));
+    }
 
     window.dispatchEvent(new Event("fitness-realm-profile-updated"));
   };
 
   const handleResetCoaching = () => {
     if (!profile) return;
+    const profileId = profile.id;
     const confirmReset = window.confirm(
       language === "fr"
         ? "Voulez-vous vraiment réinitialiser votre programme de coaching ?"
@@ -651,8 +804,24 @@ export default function ProfilePage() {
     );
     if (!confirmReset) return;
 
-    const programKey = `fitness-realm-coaching-program-${profile.id}`;
-    localStorage.removeItem(programKey);
+    const programKey = `fitness-realm-coaching-program-${profileId}`;
+    if (!isDemo) {
+      async function resetCoachingInDB() {
+        try {
+          const { createClient } = await import("@/lib/supabase/client");
+          const supabase = createClient();
+          await supabase
+            .from("coaching_programs")
+            .delete()
+            .eq("user_id", profileId);
+        } catch (err) {
+          console.error("Failed to reset coaching program in database:", err);
+        }
+      }
+      resetCoachingInDB();
+    } else {
+      localStorage.removeItem(programKey);
+    }
     setCoachingProgram(null);
     setCoachingStep(1);
     setCoachingAnswers({});
@@ -660,33 +829,229 @@ export default function ProfilePage() {
 
   const handleAssociateWorkout = (plannedWorkoutId: string, loggedWorkoutId: string) => {
     if (!profile || !coachingProgram) return;
+    const profileId = profile.id;
 
     const loggedWorkout = workouts.find((w) => w.id === loggedWorkoutId);
     if (!loggedWorkout) return;
 
-    const updatedWeeks = coachingProgram.weeks.map((week) => {
-      const updatedWorkouts = week.workouts.map((w) => {
-        if (w.id === plannedWorkoutId) {
-          const targetDist = w.targetDistance || 5.0;
-          const matchRatio = Math.min(loggedWorkout.distance / targetDist, targetDist / loggedWorkout.distance);
-          const paceAccuracy = Math.round((0.85 + Math.random() * 0.14) * 100);
+    // Helper to parse a pace string to seconds per km
+    const parsePaceToSeconds = (paceStr: string, sport: string): number => {
+      if (!paceStr) return 360; // fallback to 6:00 min/km
+      if (sport === "Run") {
+        const parts = paceStr.split(":");
+        const minutes = parseInt(parts[0], 10) || 0;
+        const seconds = parseInt(parts[1], 10) || 0;
+        return minutes * 60 + seconds;
+      } else {
+        // Ride or Walk (speed in km/h)
+        const speed = parseFloat(paceStr.replace(/[^\d.]/g, "")) || 10.0;
+        return speed > 0 ? 3600 / speed : 360;
+      }
+    };
 
-          return {
-            ...w,
-            completed: true,
-            associatedWorkoutId: loggedWorkoutId,
-            paceAccuracy: matchRatio >= 0.8 ? paceAccuracy : 75,
-          };
-        }
-        return w;
-      });
-      return { ...week, workouts: updatedWorkouts };
-    });
+    // Helper to format seconds per km back to the sport's pace/speed string
+    const formatSecondsToPace = (seconds: number, sport: string): string => {
+      if (sport === "Run") {
+        const minutes = Math.floor(seconds / 60);
+        const secs = Math.round(seconds % 60);
+        return `${minutes}:${secs.toString().padStart(2, "0")}`;
+      } else {
+        // Ride or Walk (speed in km/h)
+        const speed = seconds > 0 ? 3600 / seconds : 10.0;
+        const formattedSpeed = Math.round(speed * 10) / 10;
+        return `${formattedSpeed} km/h`;
+      }
+    };
 
-    const activeWeek = updatedWeeks[coachingProgram.currentWeekIndex];
-    const plannedWorkout = activeWeek.workouts.find((w) => w.id === plannedWorkoutId);
+    // Helper to adjust a pace string by a multiplier (e.g. 1.1 for 10% slower, 0.9 for 10% faster)
+    const adjustPaceString = (paceStr: string, multiplier: number, sport: string): string => {
+      const seconds = parsePaceToSeconds(paceStr, sport);
+      const adjustedSeconds = seconds * multiplier;
+      return formatSecondsToPace(adjustedSeconds, sport);
+    };
+
+    // 1. Find the planned workout to get targets
+    let targetPaceStr = coachingProgram.targetPaces.easy;
+    let targetDistVal = 5.0;
+    let plannedWorkout: PlannedWorkout | undefined;
+
+    for (const week of coachingProgram.weeks) {
+      const found = week.workouts.find((w) => w.id === plannedWorkoutId);
+      if (found) {
+        plannedWorkout = found;
+        break;
+      }
+    }
+
     if (!plannedWorkout) return;
 
+    if (plannedWorkout.targetPace) {
+      targetPaceStr = plannedWorkout.targetPace;
+    }
+    const targetPaceSeconds = parsePaceToSeconds(targetPaceStr, coachingProgram.sport);
+
+    if (plannedWorkout.targetDistance) {
+      targetDistVal = plannedWorkout.targetDistance;
+    } else if (plannedWorkout.targetDuration) {
+      // If targetDistance is null, estimate target distance using target duration in minutes:
+      // (duration in seconds) / (pace in seconds/km)
+      targetDistVal = (plannedWorkout.targetDuration * 60) / targetPaceSeconds;
+    }
+
+    // 2. Calculate actual values
+    const actualDistance = loggedWorkout.distance; // in km
+    let actualDuration = loggedWorkout.duration || 0;
+
+    if (actualDuration <= 0) {
+      // Fallback: estimate actual duration based on actual distance and target pace
+      actualDuration = Math.round(actualDistance * targetPaceSeconds);
+    }
+
+    const actualPaceSeconds = actualDuration / actualDistance;
+    const formattedActualPace = formatSecondsToPace(actualPaceSeconds, coachingProgram.sport);
+
+    // 3. Perform comparison & classification
+    const distanceRatio = actualDistance / targetDistVal;
+    let classification: 'too_hard' | 'too_easy' | 'perfect' = 'perfect';
+
+    if (coachingProgram.sport === "Run") {
+      // Too Hard: distance < 80% or pace > 1 min/km slower (actualPaceSeconds > targetPaceSeconds + 60)
+      if (distanceRatio < 0.8 || actualPaceSeconds > targetPaceSeconds + 60) {
+        classification = 'too_hard';
+      }
+      // Too Easy: distance > 120% or pace < 45s/km faster (actualPaceSeconds < targetPaceSeconds - 45)
+      else if (distanceRatio > 1.2 || actualPaceSeconds < targetPaceSeconds - 45) {
+        classification = 'too_easy';
+      }
+    } else if (coachingProgram.sport === "Ride") {
+      const targetSpeed = 3600 / targetPaceSeconds;
+      const actualSpeed = 3600 / actualPaceSeconds;
+      // Too Hard: distance < 80% or speed > 5 km/h slower
+      if (distanceRatio < 0.8 || actualSpeed < targetSpeed - 5) {
+        classification = 'too_hard';
+      }
+      // Too Easy: distance > 120% or speed > 4 km/h faster
+      else if (distanceRatio > 1.2 || actualSpeed > targetSpeed + 4) {
+        classification = 'too_easy';
+      }
+    } else {
+      // Walk
+      const targetSpeed = 3600 / targetPaceSeconds;
+      const actualSpeed = 3600 / actualPaceSeconds;
+      // Too Hard: distance < 80% or speed > 1 km/h slower
+      if (distanceRatio < 0.8 || actualSpeed < targetSpeed - 1) {
+        classification = 'too_hard';
+      }
+      // Too Easy: distance > 120% or speed > 1 km/h faster
+      else if (distanceRatio > 1.2 || actualSpeed > targetSpeed + 1) {
+        classification = 'too_easy';
+      }
+    }
+
+    // 4. Compute accuracy
+    const distanceAccuracy = Math.min(actualDistance / targetDistVal, targetDistVal / actualDistance);
+    const paceAccuracyRatio = Math.min(actualPaceSeconds / targetPaceSeconds, targetPaceSeconds / actualPaceSeconds);
+    const computedPaceAccuracy = Math.max(50, Math.min(100, Math.round(((distanceAccuracy + paceAccuracyRatio) / 2) * 100)));
+
+    // 5. Generate Coach Feedback
+    let feedbackMessage = "";
+    if (classification === "too_hard") {
+      feedbackMessage = language === "fr"
+        ? "Cet entraînement était trop difficile. Ne vous inquiétez pas, j'ai adapté la suite de votre programme : les distances futures sont réduites de 10% et les allures cibles sont ralenties pour vous permettre de récupérer et de progresser à votre rythme."
+        : "This workout was too hard. No worries, I have adjusted the rest of your program: future distances are reduced by 10% and target paces/speeds are scaled down to help you recover and progress at your own pace.";
+    } else if (classification === "too_easy") {
+      feedbackMessage = language === "fr"
+        ? "Super travail ! Cet entraînement a été réalisé très facilement. J'ai ajusté votre programme pour stimuler votre progression : les distances futures sont augmentées de 10% et les allures cibles sont légèrement accélérées."
+        : "Great job! This workout felt too easy. I have adjusted your program to boost your progress: future distances are increased by 10% and target paces/speeds are slightly accelerated.";
+    } else {
+      feedbackMessage = language === "fr"
+        ? "Excellent respect des consignes ! Votre allure et votre distance correspondent parfaitement aux cibles du programme. Continuez ainsi !"
+        : "Excellent consistency! Your pace and distance match the program targets perfectly. Keep up the great work!";
+    }
+
+    // 6. Update coaching program: adjust current and future week workouts
+    const currentWeekNumber = coachingProgram.weeks[coachingProgram.currentWeekIndex].weekNumber;
+
+    const updatedWeeks = coachingProgram.weeks.map((week) => {
+      // Adjust uncompleted workouts in current or future weeks
+      if (week.weekNumber >= currentWeekNumber) {
+        const updatedWorkouts = week.workouts.map((w) => {
+          // If this is the workout currently being associated
+          if (w.id === plannedWorkoutId) {
+            return {
+              ...w,
+              completed: true,
+              associatedWorkoutId: loggedWorkoutId,
+              paceAccuracy: computedPaceAccuracy,
+              actualDistance,
+              actualDuration,
+              actualPace: formattedActualPace,
+              coachFeedback: feedbackMessage,
+            };
+          }
+
+          // If this is an uncompleted workout in current/future weeks, adjust targets!
+          if (!w.completed) {
+            let newDistance = w.targetDistance;
+            let newDuration = w.targetDuration;
+            let newPace = w.targetPace;
+
+            if (classification === "too_hard") {
+              newDistance = w.targetDistance ? Math.round(w.targetDistance * 0.9 * 10) / 10 : null;
+              newDuration = w.targetDuration ? Math.round(w.targetDuration * 0.9) : null;
+              newPace = w.targetPace ? adjustPaceString(w.targetPace, 1.1, coachingProgram.sport) : null;
+            } else if (classification === "too_easy") {
+              newDistance = w.targetDistance ? Math.round(w.targetDistance * 1.1 * 10) / 10 : null;
+              newDuration = w.targetDuration ? Math.round(w.targetDuration * 1.1) : null;
+              newPace = w.targetPace ? adjustPaceString(w.targetPace, 0.9, coachingProgram.sport) : null;
+            }
+
+            // Also reconstruct structure/description if they contain the target pace
+            let newStructure = w.structure;
+            let newDescription = w.description;
+            if (w.targetPace && newPace) {
+              const oldPaceEscaped = w.targetPace.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+              const regex = new RegExp(oldPaceEscaped, 'g');
+              newStructure = w.structure.map(s => s.replace(regex, newPace!));
+              newDescription = w.description.replace(regex, newPace);
+            }
+
+            return {
+              ...w,
+              targetDistance: newDistance,
+              targetDuration: newDuration,
+              targetPace: newPace,
+              structure: newStructure,
+              description: newDescription,
+            };
+          }
+
+          return w;
+        });
+
+        return { ...week, workouts: updatedWorkouts };
+      }
+
+      return week;
+    });
+
+    // 7. Update global target paces
+    let newGlobalTargetPaces = { ...coachingProgram.targetPaces };
+    if (classification === "too_hard") {
+      newGlobalTargetPaces = {
+        easy: adjustPaceString(coachingProgram.targetPaces.easy, 1.1, coachingProgram.sport),
+        tempo: adjustPaceString(coachingProgram.targetPaces.tempo, 1.1, coachingProgram.sport),
+        intervals: adjustPaceString(coachingProgram.targetPaces.intervals, 1.1, coachingProgram.sport),
+      };
+    } else if (classification === "too_easy") {
+      newGlobalTargetPaces = {
+        easy: adjustPaceString(coachingProgram.targetPaces.easy, 0.9, coachingProgram.sport),
+        tempo: adjustPaceString(coachingProgram.targetPaces.tempo, 0.9, coachingProgram.sport),
+        intervals: adjustPaceString(coachingProgram.targetPaces.intervals, 0.9, coachingProgram.sport),
+      };
+    }
+
+    // 8. Update user profile details (XP, Gold, level up)
     const xpReward = plannedWorkout.xpReward || 150;
     const goldReward = plannedWorkout.goldReward || 50;
 
@@ -713,13 +1078,37 @@ export default function ProfilePage() {
     const fallbackKey = `fitness-realm-profile-fallback-${profile.id}`;
     localStorage.setItem(fallbackKey, JSON.stringify(updatedProfile));
 
+    // 9. Construct final updated coaching program
     const updatedProgram: CoachingProgram = {
       ...coachingProgram,
+      targetPaces: newGlobalTargetPaces,
       weeks: updatedWeeks,
     };
-    const programKey = `fitness-realm-coaching-program-${profile.id}`;
-    localStorage.setItem(programKey, JSON.stringify(updatedProgram));
+
+    const programKey = `fitness-realm-coaching-program-${profileId}`;
     setCoachingProgram(updatedProgram);
+
+    // 10. Save to database or localStorage
+    if (!isDemo) {
+      async function saveAssociationToDB() {
+        try {
+          const { createClient } = await import("@/lib/supabase/client");
+          const supabase = createClient();
+          await supabase
+            .from("coaching_programs")
+            .update({ 
+              target_paces: newGlobalTargetPaces,
+              weeks_data: updatedWeeks 
+            })
+            .eq("user_id", profileId);
+        } catch (err) {
+          console.error("Failed to save association to database:", err);
+        }
+      }
+      saveAssociationToDB();
+    } else {
+      localStorage.setItem(programKey, JSON.stringify(updatedProgram));
+    }
 
     setWorkoutToAssociate(null);
     setShowAssociateModal(false);
@@ -728,13 +1117,14 @@ export default function ProfilePage() {
 
     alert(
       language === "fr"
-        ? `🎉 Entraînement associé ! +${xpReward} XP et +${goldReward} Or gagnés !`
-        : `🎉 Workout associated! +${xpReward} XP and +${goldReward} Gold earned!`
+        ? `🎉 Entraînement associé ! +${xpReward} XP et +${goldReward} Or gagnés !\n\nAnalyse du coach : ${feedbackMessage}`
+        : `🎉 Workout associated! +${xpReward} XP and +${goldReward} Gold earned!\n\nCoach feedback: ${feedbackMessage}`
     );
   };
 
   const handleCloseWeek = () => {
     if (!profile || !coachingProgram) return;
+    const profileId = profile.id;
 
     const currentWeek = coachingProgram.weeks[coachingProgram.currentWeekIndex];
     const totalWorkouts = currentWeek.workouts.length;
@@ -823,10 +1213,31 @@ export default function ProfilePage() {
       claimed: false,
     };
 
-    const programKey = `fitness-realm-coaching-program-${profile.id}`;
-    localStorage.setItem(programKey, JSON.stringify(updatedProgram));
+    const programKey = `fitness-realm-coaching-program-${profileId}`;
     setCoachingProgram(updatedProgram);
     setActiveWeekTab(nextWeekIndex + 1);
+
+    if (!isDemo) {
+      async function saveCloseWeekToDB() {
+        try {
+          const { createClient } = await import("@/lib/supabase/client");
+          const supabase = createClient();
+          await supabase
+            .from("coaching_programs")
+            .update({
+              current_week_index: updatedProgram.currentWeekIndex,
+              weeks_data: updatedProgram.weeks,
+              claimed: updatedProgram.claimed,
+            })
+            .eq("user_id", profileId);
+        } catch (err) {
+          console.error("Failed to save closed week to database:", err);
+        }
+      }
+      saveCloseWeekToDB();
+    } else {
+      localStorage.setItem(programKey, JSON.stringify(updatedProgram));
+    }
 
     window.dispatchEvent(new Event("fitness-realm-profile-updated"));
 
@@ -1412,7 +1823,7 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS age INTEGER;`}</pre>
                   companionsList.map((item) => {
                     const meetsLevel = !item.levelRequired || profile.level >= item.levelRequired;
                     const meetsFaction = !item.faction || profile.faction === item.faction;
-                    const isUnlocked = item.isDefault || (meetsLevel && meetsFaction);
+                    const isUnlocked = item.isDefault || (meetsLevel && meetsFaction) || unlockedItems.includes(item.id);
                     const isEquipped = equippedCompanion === item.value;
 
                     return (
@@ -1899,14 +2310,88 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS age INTEGER;`}</pre>
                                 </div>
 
                                 {/* Segments structures */}
-                                <div className="mt-3 bg-slate-950/50 rounded-lg p-2.5 border border-slate-900/50 space-y-1.5">
-                                  {w.structure.map((seg, sidx) => (
-                                    <div key={sidx} className="flex items-start gap-1.5 text-[10px] text-slate-400 font-medium">
-                                      <span className="text-violet-400 select-none">•</span>
-                                      <span>{seg}</span>
-                                    </div>
-                                  ))}
+                                <div className="mt-3 bg-slate-950/50 rounded-lg p-2.5 border border-slate-900/50 space-y-1.5 animate-fade-in">
+                                  {w.structure.map((seg, sidx) => {
+                                    const isWarmup = seg.toLowerCase().includes("échauffement") || seg.toLowerCase().includes("warm-up");
+                                    const isCooldown = seg.toLowerCase().includes("retour au calme") || seg.toLowerCase().includes("cool-down");
+
+                                    if (isWarmup) {
+                                      return (
+                                        <details key={sidx} className="group transition-all duration-305">
+                                          <summary className="flex items-center gap-1.5 text-[10px] text-slate-400 font-medium cursor-pointer hover:text-violet-400 select-none list-none outline-none">
+                                            <span className="text-violet-400">•</span>
+                                            <span className="border-b border-dotted border-slate-600 hover:border-violet-500">{seg}</span>
+                                            <span className="text-[7px] bg-violet-950/30 border border-violet-900/40 text-violet-400 font-bold px-1 rounded-sm tracking-wider group-open:bg-violet-900/40">INFO</span>
+                                          </summary>
+                                          <div className="mt-1.5 ml-3 p-2.5 bg-[#141432] border border-violet-900/20 rounded-lg text-[9px] text-slate-400 leading-relaxed max-w-sm shadow-md">
+                                            💡 <strong>{language === "fr" ? "Échauffement :" : "Warm-up:"}</strong>{" "}
+                                            {language === "fr"
+                                              ? "Cette phase prépare le cœur, les muscles et les articulations à l'effort. Commencez par un trot ou pas léger très facile, puis augmentez progressivement le rythme."
+                                              : "Prepares your heart, muscles, and joints for the effort. Start with a very easy jog/trot or walk, then gradually build up the intensity."}
+                                          </div>
+                                        </details>
+                                      );
+                                    }
+
+                                    if (isCooldown) {
+                                      return (
+                                        <details key={sidx} className="group transition-all duration-305">
+                                          <summary className="flex items-center gap-1.5 text-[10px] text-slate-400 font-medium cursor-pointer hover:text-violet-400 select-none list-none outline-none">
+                                            <span className="text-violet-400">•</span>
+                                            <span className="border-b border-dotted border-slate-600 hover:border-violet-500">{seg}</span>
+                                            <span className="text-[7px] bg-violet-950/30 border border-violet-900/40 text-violet-400 font-bold px-1 rounded-sm tracking-wider group-open:bg-violet-900/40">INFO</span>
+                                          </summary>
+                                          <div className="mt-1.5 ml-3 p-2.5 bg-[#141432] border border-violet-900/20 rounded-lg text-[9px] text-slate-400 leading-relaxed max-w-sm shadow-md">
+                                            💡 <strong>{language === "fr" ? "Retour au calme :" : "Cool-down:"}</strong>{" "}
+                                            {language === "fr"
+                                              ? "Permet de faire redescendre progressivement le rythme cardiaque et d'éliminer les toxines. Terminez par 5-10 min de trot très lent ou de marche de récupération."
+                                              : "Gradually lowers your heart rate and helps flush metabolic waste. Finish with 5-10 min of very light jogging or easy recovery walking."}
+                                          </div>
+                                        </details>
+                                      );
+                                    }
+
+                                    return (
+                                      <div key={sidx} className="flex items-start gap-1.5 text-[10px] text-slate-400 font-medium">
+                                        <span className="text-violet-400 select-none">•</span>
+                                        <span>{seg}</span>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
+
+                                {/* post-run analysis debrief report */}
+                                {w.completed && (w.actualDistance != null || w.actualPace != null) && (
+                                  <div className="mt-3 p-3 bg-emerald-950/10 border border-emerald-900/20 rounded-xl space-y-2 animate-fade-in">
+                                    <span className="block text-[9px] font-orbitron font-extrabold text-emerald-400 tracking-widest uppercase flex items-center gap-1">
+                                      <span>📊</span>
+                                      <span>{language === "fr" ? "Rapport d'Analyse (Compte-rendu)" : "Workout Analysis Report"}</span>
+                                    </span>
+                                    <div className="grid grid-cols-2 gap-3 text-[10px] font-orbitron">
+                                      <div className="space-y-0.5">
+                                        <span className="block text-slate-500 font-bold uppercase tracking-wider text-[8px]">
+                                          {language === "fr" ? "Distance :" : "Distance:"}
+                                        </span>
+                                        <span className="font-extrabold text-slate-200">
+                                          {w.actualDistance?.toFixed(2)} km <span className="text-slate-550 font-medium">({language === "fr" ? "Cible" : "Target"}: {w.targetDistance} km)</span>
+                                        </span>
+                                      </div>
+                                      <div className="space-y-0.5">
+                                        <span className="block text-slate-500 font-bold uppercase tracking-wider text-[8px]">
+                                          {language === "fr" ? "Allure Moyenne :" : "Avg Pace:"}
+                                        </span>
+                                        <span className="font-extrabold text-slate-200">
+                                          {w.actualPace} <span className="text-slate-550 font-medium">({language === "fr" ? "Cible" : "Target"}: {w.targetPace})</span>
+                                        </span>
+                                      </div>
+                                    </div>
+                                    {w.coachFeedback && (
+                                      <p className="text-[10px] text-slate-450 italic leading-relaxed pt-2 border-t border-slate-900/60 font-medium">
+                                        💬 {w.coachFeedback}
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
 
                                 {/* Association Controls */}
                                 <div className="mt-3 pt-2.5 border-t border-slate-900/40 flex items-center justify-between flex-wrap gap-2">

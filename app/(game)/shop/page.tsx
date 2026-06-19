@@ -366,23 +366,62 @@ export default function ShopPage() {
 
       setProfile(updatedProfile);
 
-      // Load unlocked items from local storage fallbacks
-      const unlockedKey = `fitness-realm-unlocked-${p.id}`;
-      const unlockedRaw = localStorage.getItem(unlockedKey);
-      if (unlockedRaw) {
+      let dbUnlocked: string[] = [];
+      let dbEquippedTitle: string | null = null;
+      let dbEquippedBorder: string | null = null;
+
+      if (!isDemo) {
         try {
-          setUnlockedItems(JSON.parse(unlockedRaw));
-        } catch {}
-      } else {
-        // Default unlocked items: nothing initially except basic setups
-        const initialUnlocked = ["title-recruit"];
-        localStorage.setItem(unlockedKey, JSON.stringify(initialUnlocked));
-        setUnlockedItems(initialUnlocked);
+          const { createClient } = await import("@/lib/supabase/client");
+          const supabase = createClient();
+          const { data: cosmeticsData } = await supabase
+            .from("unlocked_cosmetics")
+            .select("item_id, equipped")
+            .eq("user_id", p.id);
+          
+          if (cosmeticsData) {
+            dbUnlocked = cosmeticsData.map(c => c.item_id);
+            
+            const eqTitleItem = cosmeticsData.find(c => c.equipped && c.item_id.startsWith("title-"));
+            if (eqTitleItem) {
+              const shopItem = SHOP_ITEMS.find(t => t.id === eqTitleItem.item_id);
+              if (shopItem) dbEquippedTitle = shopItem.value;
+            }
+
+            const eqBorderItem = cosmeticsData.find(c => c.equipped && c.item_id.startsWith("border-"));
+            if (eqBorderItem) {
+              const shopItem = SHOP_ITEMS.find(b => b.id === eqBorderItem.item_id);
+              if (shopItem) dbEquippedBorder = shopItem.value;
+            }
+          }
+        } catch (err) {
+          console.error("Error fetching cosmetics from DB:", err);
+        }
       }
 
-      // Load equipped title and border
-      setEquippedTitle(updatedProfile.city === undefined ? null : (localStorage.getItem(`fitness-realm-equipped-title-${p.id}`) || null));
-      setEquippedBorder(localStorage.getItem(`fitness-realm-equipped-border-${p.id}`) || null);
+      if (!isDemo && dbUnlocked.length > 0) {
+        setUnlockedItems(dbUnlocked);
+        setEquippedTitle(dbEquippedTitle);
+        setEquippedBorder(dbEquippedBorder);
+      } else {
+        // Load unlocked items from local storage fallbacks
+        const unlockedKey = `fitness-realm-unlocked-${p.id}`;
+        const unlockedRaw = localStorage.getItem(unlockedKey);
+        if (unlockedRaw) {
+          try {
+            setUnlockedItems(JSON.parse(unlockedRaw));
+          } catch {}
+        } else {
+          // Default unlocked items: nothing initially except basic setups
+          const initialUnlocked = ["title-recruit"];
+          localStorage.setItem(unlockedKey, JSON.stringify(initialUnlocked));
+          setUnlockedItems(initialUnlocked);
+        }
+
+        // Load equipped title and border
+        setEquippedTitle(updatedProfile.city === undefined ? null : (localStorage.getItem(`fitness-realm-equipped-title-${p.id}`) || null));
+        setEquippedBorder(localStorage.getItem(`fitness-realm-equipped-border-${p.id}`) || null);
+      }
 
       // Load validated discounts from LocalStorage
       const discountKey = `fitness-realm-discounts-${p.id}`;
@@ -525,6 +564,21 @@ export default function ShopPage() {
       localStorage.setItem(unlockedKey, JSON.stringify(updatedUnlocked));
       setUnlockedItems(updatedUnlocked);
 
+      if (!isDemo) {
+        async function saveUnlock() {
+          try {
+            const { createClient } = await import("@/lib/supabase/client");
+            const supabase = createClient();
+            await supabase
+              .from("unlocked_cosmetics")
+              .insert({ user_id: profileId, item_id: item.id, equipped: false });
+          } catch (err) {
+            console.error("Error saving unlocked quest cosmetic:", err);
+          }
+        }
+        saveUnlock();
+      }
+
       setMessage({
         text: language === "fr"
           ? `Félicitations ! Vous avez débloqué le titre légendaire "${item.name}" gratuitement !`
@@ -585,6 +639,10 @@ export default function ShopPage() {
           .from("profiles")
           .update({ gold: updatedGold })
           .eq("id", profile.id);
+        
+        await supabase
+          .from("unlocked_cosmetics")
+          .insert({ user_id: profile.id, item_id: item.id, equipped: false });
       } catch (err) {
         console.warn("DB update failed, using LocalStorage fallback for gold", err);
       }
@@ -614,6 +672,32 @@ export default function ShopPage() {
         localStorage.removeItem(`fitness-realm-equipped-title-${profileId}`);
       }
       setEquippedTitle(newValue);
+
+      if (!isDemo) {
+        async function updateDBCosmetics() {
+          try {
+            const { createClient } = await import("@/lib/supabase/client");
+            const supabase = createClient();
+            
+            await supabase
+              .from("unlocked_cosmetics")
+              .update({ equipped: false })
+              .eq("user_id", profileId)
+              .like("item_id", "title-%");
+
+            if (newValue) {
+              await supabase
+                .from("unlocked_cosmetics")
+                .update({ equipped: true })
+                .eq("user_id", profileId)
+                .eq("item_id", item.id);
+            }
+          } catch (err) {
+            console.error("Failed to update database equipped cosmetic:", err);
+          }
+        }
+        updateDBCosmetics();
+      }
     } else if (item.type === "border") {
       const isCurrentlyEquipped = equippedBorder === item.value;
       const newValue = isCurrentlyEquipped ? null : item.value;
@@ -624,6 +708,32 @@ export default function ShopPage() {
         localStorage.removeItem(`fitness-realm-equipped-border-${profileId}`);
       }
       setEquippedBorder(newValue);
+
+      if (!isDemo) {
+        async function updateDBCosmetics() {
+          try {
+            const { createClient } = await import("@/lib/supabase/client");
+            const supabase = createClient();
+            
+            await supabase
+              .from("unlocked_cosmetics")
+              .update({ equipped: false })
+              .eq("user_id", profileId)
+              .like("item_id", "border-%");
+
+            if (newValue) {
+              await supabase
+                .from("unlocked_cosmetics")
+                .update({ equipped: true })
+                .eq("user_id", profileId)
+                .eq("item_id", item.id);
+            }
+          } catch (err) {
+            console.error("Failed to update database equipped cosmetic:", err);
+          }
+        }
+        updateDBCosmetics();
+      }
     } else if (item.type === "avatar") {
       const fallbackKey = `fitness-realm-profile-fallback-${profileId}`;
       const currentFallbackRaw = localStorage.getItem(fallbackKey);

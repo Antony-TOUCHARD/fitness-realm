@@ -25,6 +25,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [bonusExpires, setBonusExpires] = useState<number | null>(null);
   const [remainingBonusTime, setRemainingBonusTime] = useState<string>("");
+  const [hasPremium, setHasPremium] = useState(false);
 
   const isDemo = isDemoMode();
 
@@ -139,6 +140,37 @@ export default function Dashboard() {
       setProfile(activeProfile);
       setWorkouts(demoWorkouts);
       setTerritories(demoTerritories);
+
+      if (activeProfile) {
+        const programKey = `fitness-realm-coaching-program-${activeProfile.id}`;
+        const programRaw = localStorage.getItem(programKey);
+        if (programRaw) {
+          try {
+            const parsed = JSON.parse(programRaw);
+            setCoachingProgram(parsed);
+          } catch {
+            setCoachingProgram(null);
+          }
+        } else {
+          setCoachingProgram(null);
+        }
+
+        const bonusKey = `fitness-realm-coaching-bonus-expires-${activeProfile.id}`;
+        const bonusRaw = localStorage.getItem(bonusKey);
+        if (bonusRaw) {
+          const exp = Number(bonusRaw);
+          if (exp > Date.now()) {
+            setBonusExpires(exp);
+          } else {
+            localStorage.removeItem(bonusKey);
+            setBonusExpires(null);
+          }
+        } else {
+          setBonusExpires(null);
+        }
+
+        setHasPremium(localStorage.getItem(`fitness-realm-pass-premium-${activeProfile.id}`) === "true");
+      }
     } else {
       try {
         const { createClient } = await import("@/lib/supabase/client");
@@ -178,43 +210,58 @@ export default function Dashboard() {
             .from("territories")
             .select("*");
           if (territoriesData) setTerritories(territoriesData);
-        }
-      } catch (error) {
-        console.error("Error loading dashboard data:", error);
-      }
-    }
 
-    if (activeProfile) {
-      // Load coaching program from LocalStorage
-      const programKey = `fitness-realm-coaching-program-${activeProfile.id}`;
-      const programRaw = localStorage.getItem(programKey);
-      if (programRaw) {
-        try {
-          const parsed = JSON.parse(programRaw);
-          if (parsed && Array.isArray(parsed.weeks)) {
-            setCoachingProgram(parsed);
+          // 4. Fetch Coaching Program from DB
+          const { data: coachingData } = await supabase
+            .from("coaching_programs")
+            .select("*")
+            .eq("user_id", user.id)
+            .maybeSingle();
+
+          if (coachingData) {
+            setCoachingProgram({
+              name: coachingData.name,
+              sport: coachingData.sport as any,
+              planType: coachingData.plan_type,
+              currentWeekIndex: coachingData.current_week_index,
+              targetPaces: coachingData.target_paces as any,
+              weeks: coachingData.weeks_data as any,
+              claimed: coachingData.claimed,
+            });
           } else {
             setCoachingProgram(null);
           }
-        } catch {
-          setCoachingProgram(null);
-        }
-      } else {
-        setCoachingProgram(null);
-      }
 
-      const bonusKey = `fitness-realm-coaching-bonus-expires-${activeProfile.id}`;
-      const bonusRaw = localStorage.getItem(bonusKey);
-      if (bonusRaw) {
-        const exp = Number(bonusRaw);
-        if (exp > Date.now()) {
-          setBonusExpires(exp);
-        } else {
-          localStorage.removeItem(bonusKey);
-          setBonusExpires(null);
+          // 5. Fetch Active Streak Boost from DB
+          const { data: boostData } = await supabase
+            .from("active_boosts")
+            .select("*")
+            .eq("user_id", user.id)
+            .maybeSingle();
+
+          if (boostData) {
+            const exp = new Date(boostData.expires_at).getTime();
+            if (exp > Date.now()) {
+              setBonusExpires(exp);
+            } else {
+              setBonusExpires(null);
+              await supabase.from("active_boosts").delete().eq("user_id", user.id);
+            }
+          } else {
+            setBonusExpires(null);
+          }
+
+          // 6. Fetch Unlocked Cosmetics to check premium battle pass
+          const { data: cosmetics } = await supabase
+            .from("unlocked_cosmetics")
+            .select("item_id")
+            .eq("user_id", user.id);
+          
+          const hasPremiumPass = cosmetics?.some(c => c.item_id === "pass-premium-s1") || false;
+          setHasPremium(hasPremiumPass);
         }
-      } else {
-        setBonusExpires(null);
+      } catch (error) {
+        console.error("Error loading dashboard data:", error);
       }
     }
     setLoading(false);
@@ -452,7 +499,7 @@ export default function Dashboard() {
                     </span>
                   </div>
                 </div>
-                {localStorage.getItem(`fitness-realm-pass-premium-${profile.id}`) === "true" && (
+                {hasPremium && (
                   <Badge variant="accent" className="text-[9px] py-0.5 px-2">PREMIUM</Badge>
                 )}
               </div>

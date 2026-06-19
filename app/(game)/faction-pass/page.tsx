@@ -263,19 +263,48 @@ export default function FactionPassPage() {
       setProfile(updatedProfile);
       setWorkouts(activeWorkouts);
 
-      // Load claimed rewards list
-      const claimedKey = `fitness-realm-pass-claimed-${p.id}`;
-      const claimedRaw = localStorage.getItem(claimedKey);
-      if (claimedRaw) {
+      let dbClaimed: string[] = [];
+      let dbPremiumActive = false;
+
+      if (!isDemo) {
         try {
-          setClaimedRewards(JSON.parse(claimedRaw));
-        } catch {}
+          const { createClient } = await import("@/lib/supabase/client");
+          const supabase = createClient();
+          const { data: cosmeticsData } = await supabase
+            .from("unlocked_cosmetics")
+            .select("item_id")
+            .eq("user_id", p.id);
+          
+          if (cosmeticsData) {
+            const unlockedList = cosmeticsData.map(c => c.item_id);
+            dbPremiumActive = unlockedList.includes("pass-premium-s1");
+            dbClaimed = unlockedList
+              .filter(item => item.startsWith("claim-"))
+              .map(item => item.replace("claim-", ""));
+          }
+        } catch (err) {
+          console.error("Error loading cosmetics/pass data from DB:", err);
+        }
       }
 
-      // Load premium pass status
-      const premiumKey = `fitness-realm-pass-premium-${p.id}`;
-      const isPremium = localStorage.getItem(premiumKey) === "true";
-      setPremiumActive(isPremium);
+      if (!isDemo && (dbPremiumActive || dbClaimed.length > 0)) {
+        setPremiumActive(dbPremiumActive);
+        setClaimedRewards(dbClaimed);
+      } else {
+        // Load claimed rewards list
+        const claimedKey = `fitness-realm-pass-claimed-${p.id}`;
+        const claimedRaw = localStorage.getItem(claimedKey);
+        if (claimedRaw) {
+          try {
+            setClaimedRewards(JSON.parse(claimedRaw));
+          } catch {}
+        }
+
+        // Load premium pass status
+        const premiumKey = `fitness-realm-pass-premium-${p.id}`;
+        const isPremium = localStorage.getItem(premiumKey) === "true";
+        setPremiumActive(isPremium);
+      }
     }
 
     setLoading(false);
@@ -325,12 +354,20 @@ export default function FactionPassPage() {
 
     if (!isDemo) {
       async function updateDB() {
-        const { createClient } = await import("@/lib/supabase/client");
-        const supabase = createClient();
-        await supabase
-          .from("profiles")
-          .update({ gold: updatedGold })
-          .eq("id", profileId);
+        try {
+          const { createClient } = await import("@/lib/supabase/client");
+          const supabase = createClient();
+          await supabase
+            .from("profiles")
+            .update({ gold: updatedGold })
+            .eq("id", profileId);
+          
+          await supabase
+            .from("unlocked_cosmetics")
+            .insert({ user_id: profileId, item_id: "pass-premium-s1", equipped: false });
+        } catch (err) {
+          console.error("Error updating DB premium pass status:", err);
+        }
       }
       updateDB();
     }
@@ -383,10 +420,16 @@ export default function FactionPassPage() {
             .from("profiles")
             .update({ gold: updatedGold })
             .eq("id", profile.id);
-        } catch {}
+          
+          await supabase
+            .from("unlocked_cosmetics")
+            .insert({ user_id: profile.id, item_id: `claim-${rewardId}`, equipped: false });
+        } catch (err) {
+          console.error("Error saving gold reward in DB:", err);
+        }
       }
       setProfile((prev) => prev ? { ...prev, gold: updatedGold } : null);
-    } else if (type === "title" || type === "border" || type === "avatar") {
+    } else if (type === "title" || type === "border" || type === "avatar" || type === "companion") {
       // Unlock item inside cosmetics list
       const unlockedKey = `fitness-realm-unlocked-${profile.id}`;
       const unlockedRaw = localStorage.getItem(unlockedKey);
@@ -405,6 +448,7 @@ export default function FactionPassPage() {
       if (value === "https://api.dicebear.com/7.x/adventurer/svg?seed=Lily") itemId = "avatar-recruit"; // mock shop item
       if (value === "https://api.dicebear.com/7.x/adventurer/svg?seed=Sassy") itemId = "avatar-mage-2";
       if (value === "https://api.dicebear.com/7.x/adventurer/svg?seed=Buster") itemId = "avatar-dragon";
+      if (value === "Phénix Solaire") itemId = "companion-phoenix";
 
       if (!unlocked.includes(itemId)) {
         unlocked.push(itemId);
@@ -415,6 +459,22 @@ export default function FactionPassPage() {
       }
 
       localStorage.setItem(unlockedKey, JSON.stringify(unlocked));
+
+      if (!isDemo) {
+        try {
+          const { createClient } = await import("@/lib/supabase/client");
+          const supabase = createClient();
+          
+          await supabase
+            .from("unlocked_cosmetics")
+            .insert([
+              { user_id: profile.id, item_id: itemId, equipped: false },
+              { user_id: profile.id, item_id: `claim-${rewardId}`, equipped: false }
+            ]);
+        } catch (err) {
+          console.error("Error saving cosmetic reward in DB:", err);
+        }
+      }
     }
 
     // Save claim status
