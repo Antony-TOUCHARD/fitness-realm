@@ -1,0 +1,1997 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "description": "",
+    "title": "standard public schema",
+    "version": "14.5"
+  },
+  "host": "hcqbeuylmzstfrzkylvr.supabase.co:443",
+  "basePath": "/",
+  "schemes": [
+    "https"
+  ],
+  "consumes": [
+    "application/json",
+    "application/vnd.pgrst.object+json;nulls=stripped",
+    "application/vnd.pgrst.object+json",
+    "text/csv"
+  ],
+  "produces": [
+    "application/json",
+    "application/vnd.pgrst.object+json;nulls=stripped",
+    "application/vnd.pgrst.object+json",
+    "text/csv"
+  ],
+  "paths": {
+    "/": {
+      "get": {
+        "produces": [
+          "application/openapi+json",
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "OpenAPI description (this document)",
+        "tags": [
+          "Introspection"
+        ]
+      }
+    },
+    "/workouts": {
+      "get": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/rowFilter.workouts.id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.user_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.strava_activity_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.name"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.activity_type"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.distance"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.elevation_gain"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.avg_heartrate"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.xp_gained"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.gold_gained"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.anti_cheat_status"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.start_date"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.processed_at"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.territory_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.summary_polyline"
+          },
+          {
+            "$ref": "#/parameters/select"
+          },
+          {
+            "$ref": "#/parameters/order"
+          },
+          {
+            "$ref": "#/parameters/range"
+          },
+          {
+            "$ref": "#/parameters/rangeUnit"
+          },
+          {
+            "$ref": "#/parameters/offset"
+          },
+          {
+            "$ref": "#/parameters/limit"
+          },
+          {
+            "$ref": "#/parameters/preferCount"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "items": {
+                "$ref": "#/definitions/workouts"
+              },
+              "type": "array"
+            }
+          },
+          "206": {
+            "description": "Partial Content"
+          }
+        },
+        "tags": [
+          "workouts"
+        ]
+      },
+      "post": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/body.workouts"
+          },
+          {
+            "$ref": "#/parameters/select"
+          },
+          {
+            "$ref": "#/parameters/preferPost"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        },
+        "tags": [
+          "workouts"
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/rowFilter.workouts.id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.user_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.strava_activity_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.name"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.activity_type"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.distance"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.elevation_gain"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.avg_heartrate"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.xp_gained"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.gold_gained"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.anti_cheat_status"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.start_date"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.processed_at"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.territory_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.summary_polyline"
+          },
+          {
+            "$ref": "#/parameters/preferReturn"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "tags": [
+          "workouts"
+        ]
+      },
+      "patch": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/rowFilter.workouts.id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.user_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.strava_activity_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.name"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.activity_type"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.distance"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.elevation_gain"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.avg_heartrate"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.xp_gained"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.gold_gained"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.anti_cheat_status"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.start_date"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.processed_at"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.territory_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.workouts.summary_polyline"
+          },
+          {
+            "$ref": "#/parameters/body.workouts"
+          },
+          {
+            "$ref": "#/parameters/preferReturn"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "tags": [
+          "workouts"
+        ]
+      }
+    },
+    "/unlocked_cosmetics": {
+      "get": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/rowFilter.unlocked_cosmetics.user_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.unlocked_cosmetics.item_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.unlocked_cosmetics.equipped"
+          },
+          {
+            "$ref": "#/parameters/select"
+          },
+          {
+            "$ref": "#/parameters/order"
+          },
+          {
+            "$ref": "#/parameters/range"
+          },
+          {
+            "$ref": "#/parameters/rangeUnit"
+          },
+          {
+            "$ref": "#/parameters/offset"
+          },
+          {
+            "$ref": "#/parameters/limit"
+          },
+          {
+            "$ref": "#/parameters/preferCount"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "items": {
+                "$ref": "#/definitions/unlocked_cosmetics"
+              },
+              "type": "array"
+            }
+          },
+          "206": {
+            "description": "Partial Content"
+          }
+        },
+        "tags": [
+          "unlocked_cosmetics"
+        ]
+      },
+      "post": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/body.unlocked_cosmetics"
+          },
+          {
+            "$ref": "#/parameters/select"
+          },
+          {
+            "$ref": "#/parameters/preferPost"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        },
+        "tags": [
+          "unlocked_cosmetics"
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/rowFilter.unlocked_cosmetics.user_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.unlocked_cosmetics.item_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.unlocked_cosmetics.equipped"
+          },
+          {
+            "$ref": "#/parameters/preferReturn"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "tags": [
+          "unlocked_cosmetics"
+        ]
+      },
+      "patch": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/rowFilter.unlocked_cosmetics.user_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.unlocked_cosmetics.item_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.unlocked_cosmetics.equipped"
+          },
+          {
+            "$ref": "#/parameters/body.unlocked_cosmetics"
+          },
+          {
+            "$ref": "#/parameters/preferReturn"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "tags": [
+          "unlocked_cosmetics"
+        ]
+      }
+    },
+    "/coaching_programs": {
+      "get": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.user_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.name"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.sport"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.plan_type"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.current_week_index"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.target_paces"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.weeks_data"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.claimed"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.created_at"
+          },
+          {
+            "$ref": "#/parameters/select"
+          },
+          {
+            "$ref": "#/parameters/order"
+          },
+          {
+            "$ref": "#/parameters/range"
+          },
+          {
+            "$ref": "#/parameters/rangeUnit"
+          },
+          {
+            "$ref": "#/parameters/offset"
+          },
+          {
+            "$ref": "#/parameters/limit"
+          },
+          {
+            "$ref": "#/parameters/preferCount"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "items": {
+                "$ref": "#/definitions/coaching_programs"
+              },
+              "type": "array"
+            }
+          },
+          "206": {
+            "description": "Partial Content"
+          }
+        },
+        "tags": [
+          "coaching_programs"
+        ]
+      },
+      "post": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/body.coaching_programs"
+          },
+          {
+            "$ref": "#/parameters/select"
+          },
+          {
+            "$ref": "#/parameters/preferPost"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        },
+        "tags": [
+          "coaching_programs"
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.user_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.name"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.sport"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.plan_type"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.current_week_index"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.target_paces"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.weeks_data"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.claimed"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.created_at"
+          },
+          {
+            "$ref": "#/parameters/preferReturn"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "tags": [
+          "coaching_programs"
+        ]
+      },
+      "patch": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.user_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.name"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.sport"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.plan_type"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.current_week_index"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.target_paces"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.weeks_data"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.claimed"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.coaching_programs.created_at"
+          },
+          {
+            "$ref": "#/parameters/body.coaching_programs"
+          },
+          {
+            "$ref": "#/parameters/preferReturn"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "tags": [
+          "coaching_programs"
+        ]
+      }
+    },
+    "/active_boosts": {
+      "get": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/rowFilter.active_boosts.user_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.active_boosts.expires_at"
+          },
+          {
+            "$ref": "#/parameters/select"
+          },
+          {
+            "$ref": "#/parameters/order"
+          },
+          {
+            "$ref": "#/parameters/range"
+          },
+          {
+            "$ref": "#/parameters/rangeUnit"
+          },
+          {
+            "$ref": "#/parameters/offset"
+          },
+          {
+            "$ref": "#/parameters/limit"
+          },
+          {
+            "$ref": "#/parameters/preferCount"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "items": {
+                "$ref": "#/definitions/active_boosts"
+              },
+              "type": "array"
+            }
+          },
+          "206": {
+            "description": "Partial Content"
+          }
+        },
+        "tags": [
+          "active_boosts"
+        ]
+      },
+      "post": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/body.active_boosts"
+          },
+          {
+            "$ref": "#/parameters/select"
+          },
+          {
+            "$ref": "#/parameters/preferPost"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        },
+        "tags": [
+          "active_boosts"
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/rowFilter.active_boosts.user_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.active_boosts.expires_at"
+          },
+          {
+            "$ref": "#/parameters/preferReturn"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "tags": [
+          "active_boosts"
+        ]
+      },
+      "patch": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/rowFilter.active_boosts.user_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.active_boosts.expires_at"
+          },
+          {
+            "$ref": "#/parameters/body.active_boosts"
+          },
+          {
+            "$ref": "#/parameters/preferReturn"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "tags": [
+          "active_boosts"
+        ]
+      }
+    },
+    "/territories": {
+      "get": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/rowFilter.territories.id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.territories.name"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.territories.controlling_faction"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.territories.controlling_user_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.territories.total_influence_points"
+          },
+          {
+            "$ref": "#/parameters/select"
+          },
+          {
+            "$ref": "#/parameters/order"
+          },
+          {
+            "$ref": "#/parameters/range"
+          },
+          {
+            "$ref": "#/parameters/rangeUnit"
+          },
+          {
+            "$ref": "#/parameters/offset"
+          },
+          {
+            "$ref": "#/parameters/limit"
+          },
+          {
+            "$ref": "#/parameters/preferCount"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "items": {
+                "$ref": "#/definitions/territories"
+              },
+              "type": "array"
+            }
+          },
+          "206": {
+            "description": "Partial Content"
+          }
+        },
+        "tags": [
+          "territories"
+        ]
+      },
+      "post": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/body.territories"
+          },
+          {
+            "$ref": "#/parameters/select"
+          },
+          {
+            "$ref": "#/parameters/preferPost"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        },
+        "tags": [
+          "territories"
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/rowFilter.territories.id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.territories.name"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.territories.controlling_faction"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.territories.controlling_user_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.territories.total_influence_points"
+          },
+          {
+            "$ref": "#/parameters/preferReturn"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "tags": [
+          "territories"
+        ]
+      },
+      "patch": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/rowFilter.territories.id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.territories.name"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.territories.controlling_faction"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.territories.controlling_user_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.territories.total_influence_points"
+          },
+          {
+            "$ref": "#/parameters/body.territories"
+          },
+          {
+            "$ref": "#/parameters/preferReturn"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "tags": [
+          "territories"
+        ]
+      }
+    },
+    "/profiles": {
+      "get": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/rowFilter.profiles.id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.username"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.avatar_url"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.level"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.xp"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.gold"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.faction"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.strava_access_token"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.strava_refresh_token"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.strava_athlete_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.strava_expires_at"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.created_at"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.city"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.age"
+          },
+          {
+            "$ref": "#/parameters/select"
+          },
+          {
+            "$ref": "#/parameters/order"
+          },
+          {
+            "$ref": "#/parameters/range"
+          },
+          {
+            "$ref": "#/parameters/rangeUnit"
+          },
+          {
+            "$ref": "#/parameters/offset"
+          },
+          {
+            "$ref": "#/parameters/limit"
+          },
+          {
+            "$ref": "#/parameters/preferCount"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "items": {
+                "$ref": "#/definitions/profiles"
+              },
+              "type": "array"
+            }
+          },
+          "206": {
+            "description": "Partial Content"
+          }
+        },
+        "tags": [
+          "profiles"
+        ]
+      },
+      "post": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/body.profiles"
+          },
+          {
+            "$ref": "#/parameters/select"
+          },
+          {
+            "$ref": "#/parameters/preferPost"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        },
+        "tags": [
+          "profiles"
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/rowFilter.profiles.id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.username"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.avatar_url"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.level"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.xp"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.gold"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.faction"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.strava_access_token"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.strava_refresh_token"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.strava_athlete_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.strava_expires_at"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.created_at"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.city"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.age"
+          },
+          {
+            "$ref": "#/parameters/preferReturn"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "tags": [
+          "profiles"
+        ]
+      },
+      "patch": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/rowFilter.profiles.id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.username"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.avatar_url"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.level"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.xp"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.gold"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.faction"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.strava_access_token"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.strava_refresh_token"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.strava_athlete_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.strava_expires_at"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.created_at"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.city"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.profiles.age"
+          },
+          {
+            "$ref": "#/parameters/body.profiles"
+          },
+          {
+            "$ref": "#/parameters/preferReturn"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "tags": [
+          "profiles"
+        ]
+      }
+    },
+    "/territory_influence": {
+      "get": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/rowFilter.territory_influence.user_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.territory_influence.territory_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.territory_influence.influence_points"
+          },
+          {
+            "$ref": "#/parameters/select"
+          },
+          {
+            "$ref": "#/parameters/order"
+          },
+          {
+            "$ref": "#/parameters/range"
+          },
+          {
+            "$ref": "#/parameters/rangeUnit"
+          },
+          {
+            "$ref": "#/parameters/offset"
+          },
+          {
+            "$ref": "#/parameters/limit"
+          },
+          {
+            "$ref": "#/parameters/preferCount"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "items": {
+                "$ref": "#/definitions/territory_influence"
+              },
+              "type": "array"
+            }
+          },
+          "206": {
+            "description": "Partial Content"
+          }
+        },
+        "tags": [
+          "territory_influence"
+        ]
+      },
+      "post": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/body.territory_influence"
+          },
+          {
+            "$ref": "#/parameters/select"
+          },
+          {
+            "$ref": "#/parameters/preferPost"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        },
+        "tags": [
+          "territory_influence"
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/rowFilter.territory_influence.user_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.territory_influence.territory_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.territory_influence.influence_points"
+          },
+          {
+            "$ref": "#/parameters/preferReturn"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "tags": [
+          "territory_influence"
+        ]
+      },
+      "patch": {
+        "parameters": [
+          {
+            "$ref": "#/parameters/rowFilter.territory_influence.user_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.territory_influence.territory_id"
+          },
+          {
+            "$ref": "#/parameters/rowFilter.territory_influence.influence_points"
+          },
+          {
+            "$ref": "#/parameters/body.territory_influence"
+          },
+          {
+            "$ref": "#/parameters/preferReturn"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "tags": [
+          "territory_influence"
+        ]
+      }
+    },
+    "/rpc/get_global_stats": {
+      "post": {
+        "parameters": [
+          {
+            "in": "body",
+            "name": "args",
+            "required": true,
+            "schema": {
+              "type": "object"
+            }
+          },
+          {
+            "$ref": "#/parameters/preferParams"
+          }
+        ],
+        "produces": [
+          "application/json",
+          "application/vnd.pgrst.object+json;nulls=stripped",
+          "application/vnd.pgrst.object+json"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "(rpc) get_global_stats"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "workouts": {
+      "required": [
+        "id",
+        "user_id",
+        "strava_activity_id",
+        "name",
+        "activity_type",
+        "distance",
+        "elevation_gain",
+        "xp_gained",
+        "gold_gained",
+        "anti_cheat_status",
+        "start_date",
+        "processed_at"
+      ],
+      "properties": {
+        "id": {
+          "default": "gen_random_uuid()",
+          "description": "Note:\nThis is a Primary Key.<pk/>",
+          "format": "uuid",
+          "type": "string"
+        },
+        "user_id": {
+          "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>",
+          "format": "uuid",
+          "type": "string"
+        },
+        "strava_activity_id": {
+          "format": "text",
+          "type": "string"
+        },
+        "name": {
+          "format": "text",
+          "type": "string"
+        },
+        "activity_type": {
+          "format": "text",
+          "type": "string"
+        },
+        "distance": {
+          "format": "numeric",
+          "type": "number"
+        },
+        "elevation_gain": {
+          "format": "numeric",
+          "type": "number"
+        },
+        "avg_heartrate": {
+          "format": "numeric",
+          "type": "number"
+        },
+        "xp_gained": {
+          "format": "integer",
+          "type": "integer"
+        },
+        "gold_gained": {
+          "format": "integer",
+          "type": "integer"
+        },
+        "anti_cheat_status": {
+          "default": "Verified",
+          "format": "text",
+          "type": "string"
+        },
+        "start_date": {
+          "format": "timestamp with time zone",
+          "type": "string"
+        },
+        "processed_at": {
+          "default": "timezone('utc'::text, now())",
+          "format": "timestamp with time zone",
+          "type": "string"
+        },
+        "territory_id": {
+          "description": "Note:\nThis is a Foreign Key to `territories.id`.<fk table='territories' column='id'/>",
+          "format": "text",
+          "type": "string"
+        },
+        "summary_polyline": {
+          "format": "text",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "unlocked_cosmetics": {
+      "required": [
+        "user_id",
+        "item_id"
+      ],
+      "properties": {
+        "user_id": {
+          "description": "Note:\nThis is a Primary Key.<pk/>\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>",
+          "format": "uuid",
+          "type": "string"
+        },
+        "item_id": {
+          "description": "Note:\nThis is a Primary Key.<pk/>",
+          "format": "text",
+          "type": "string"
+        },
+        "equipped": {
+          "default": false,
+          "format": "boolean",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "coaching_programs": {
+      "required": [
+        "user_id",
+        "name",
+        "sport",
+        "plan_type",
+        "target_paces",
+        "weeks_data",
+        "created_at"
+      ],
+      "properties": {
+        "user_id": {
+          "description": "Note:\nThis is a Primary Key.<pk/>\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>",
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "format": "text",
+          "type": "string"
+        },
+        "sport": {
+          "format": "text",
+          "type": "string"
+        },
+        "plan_type": {
+          "format": "text",
+          "type": "string"
+        },
+        "current_week_index": {
+          "default": 0,
+          "format": "integer",
+          "type": "integer"
+        },
+        "target_paces": {
+          "format": "jsonb"
+        },
+        "weeks_data": {
+          "format": "jsonb"
+        },
+        "claimed": {
+          "default": false,
+          "format": "boolean",
+          "type": "boolean"
+        },
+        "created_at": {
+          "default": "timezone('utc'::text, now())",
+          "format": "timestamp with time zone",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "active_boosts": {
+      "required": [
+        "user_id",
+        "expires_at"
+      ],
+      "properties": {
+        "user_id": {
+          "description": "Note:\nThis is a Primary Key.<pk/>\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>",
+          "format": "uuid",
+          "type": "string"
+        },
+        "expires_at": {
+          "format": "timestamp with time zone",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "territories": {
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "description": "Note:\nThis is a Primary Key.<pk/>",
+          "format": "text",
+          "type": "string"
+        },
+        "name": {
+          "format": "text",
+          "type": "string"
+        },
+        "controlling_faction": {
+          "default": "Neutral",
+          "format": "text",
+          "type": "string"
+        },
+        "controlling_user_id": {
+          "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>",
+          "format": "uuid",
+          "type": "string"
+        },
+        "total_influence_points": {
+          "default": 0,
+          "format": "numeric",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "profiles": {
+      "required": [
+        "id",
+        "username",
+        "created_at"
+      ],
+      "properties": {
+        "id": {
+          "description": "Note:\nThis is a Primary Key.<pk/>",
+          "format": "uuid",
+          "type": "string"
+        },
+        "username": {
+          "format": "text",
+          "type": "string"
+        },
+        "avatar_url": {
+          "format": "text",
+          "type": "string"
+        },
+        "level": {
+          "default": 1,
+          "format": "integer",
+          "type": "integer"
+        },
+        "xp": {
+          "default": 0,
+          "format": "integer",
+          "type": "integer"
+        },
+        "gold": {
+          "default": 100,
+          "format": "integer",
+          "type": "integer"
+        },
+        "faction": {
+          "default": "Neutral",
+          "format": "text",
+          "type": "string"
+        },
+        "strava_access_token": {
+          "format": "text",
+          "type": "string"
+        },
+        "strava_refresh_token": {
+          "format": "text",
+          "type": "string"
+        },
+        "strava_athlete_id": {
+          "format": "text",
+          "type": "string"
+        },
+        "strava_expires_at": {
+          "format": "integer",
+          "type": "integer"
+        },
+        "created_at": {
+          "default": "timezone('utc'::text, now())",
+          "format": "timestamp with time zone",
+          "type": "string"
+        },
+        "city": {
+          "format": "text",
+          "type": "string"
+        },
+        "age": {
+          "format": "integer",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "territory_influence": {
+      "required": [
+        "user_id",
+        "territory_id"
+      ],
+      "properties": {
+        "user_id": {
+          "description": "Note:\nThis is a Primary Key.<pk/>\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>",
+          "format": "uuid",
+          "type": "string"
+        },
+        "territory_id": {
+          "description": "Note:\nThis is a Primary Key.<pk/>\nThis is a Foreign Key to `territories.id`.<fk table='territories' column='id'/>",
+          "format": "text",
+          "type": "string"
+        },
+        "influence_points": {
+          "default": 0,
+          "format": "numeric",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "parameters": {
+    "preferParams": {
+      "name": "Prefer",
+      "description": "Preference",
+      "required": false,
+      "in": "header",
+      "type": "string"
+    },
+    "preferReturn": {
+      "name": "Prefer",
+      "description": "Preference",
+      "required": false,
+      "enum": [
+        "return=representation",
+        "return=minimal",
+        "return=none"
+      ],
+      "in": "header",
+      "type": "string"
+    },
+    "preferCount": {
+      "name": "Prefer",
+      "description": "Preference",
+      "required": false,
+      "enum": [
+        "count=none"
+      ],
+      "in": "header",
+      "type": "string"
+    },
+    "preferPost": {
+      "name": "Prefer",
+      "description": "Preference",
+      "required": false,
+      "enum": [
+        "return=representation",
+        "return=minimal",
+        "return=none",
+        "resolution=ignore-duplicates",
+        "resolution=merge-duplicates"
+      ],
+      "in": "header",
+      "type": "string"
+    },
+    "select": {
+      "name": "select",
+      "description": "Filtering Columns",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "on_conflict": {
+      "name": "on_conflict",
+      "description": "On Conflict",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "order": {
+      "name": "order",
+      "description": "Ordering",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "range": {
+      "name": "Range",
+      "description": "Limiting and Pagination",
+      "required": false,
+      "in": "header",
+      "type": "string"
+    },
+    "rangeUnit": {
+      "name": "Range-Unit",
+      "description": "Limiting and Pagination",
+      "required": false,
+      "default": "items",
+      "in": "header",
+      "type": "string"
+    },
+    "offset": {
+      "name": "offset",
+      "description": "Limiting and Pagination",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "limit": {
+      "name": "limit",
+      "description": "Limiting and Pagination",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "body.workouts": {
+      "name": "workouts",
+      "description": "workouts",
+      "required": false,
+      "in": "body",
+      "schema": {
+        "$ref": "#/definitions/workouts"
+      }
+    },
+    "rowFilter.workouts.id": {
+      "name": "id",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.workouts.user_id": {
+      "name": "user_id",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.workouts.strava_activity_id": {
+      "name": "strava_activity_id",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.workouts.name": {
+      "name": "name",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.workouts.activity_type": {
+      "name": "activity_type",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.workouts.distance": {
+      "name": "distance",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.workouts.elevation_gain": {
+      "name": "elevation_gain",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.workouts.avg_heartrate": {
+      "name": "avg_heartrate",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.workouts.xp_gained": {
+      "name": "xp_gained",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.workouts.gold_gained": {
+      "name": "gold_gained",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.workouts.anti_cheat_status": {
+      "name": "anti_cheat_status",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.workouts.start_date": {
+      "name": "start_date",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.workouts.processed_at": {
+      "name": "processed_at",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.workouts.territory_id": {
+      "name": "territory_id",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.workouts.summary_polyline": {
+      "name": "summary_polyline",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "body.unlocked_cosmetics": {
+      "name": "unlocked_cosmetics",
+      "description": "unlocked_cosmetics",
+      "required": false,
+      "in": "body",
+      "schema": {
+        "$ref": "#/definitions/unlocked_cosmetics"
+      }
+    },
+    "rowFilter.unlocked_cosmetics.user_id": {
+      "name": "user_id",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.unlocked_cosmetics.item_id": {
+      "name": "item_id",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.unlocked_cosmetics.equipped": {
+      "name": "equipped",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "body.coaching_programs": {
+      "name": "coaching_programs",
+      "description": "coaching_programs",
+      "required": false,
+      "in": "body",
+      "schema": {
+        "$ref": "#/definitions/coaching_programs"
+      }
+    },
+    "rowFilter.coaching_programs.user_id": {
+      "name": "user_id",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.coaching_programs.name": {
+      "name": "name",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.coaching_programs.sport": {
+      "name": "sport",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.coaching_programs.plan_type": {
+      "name": "plan_type",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.coaching_programs.current_week_index": {
+      "name": "current_week_index",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.coaching_programs.target_paces": {
+      "name": "target_paces",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.coaching_programs.weeks_data": {
+      "name": "weeks_data",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.coaching_programs.claimed": {
+      "name": "claimed",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.coaching_programs.created_at": {
+      "name": "created_at",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "body.active_boosts": {
+      "name": "active_boosts",
+      "description": "active_boosts",
+      "required": false,
+      "in": "body",
+      "schema": {
+        "$ref": "#/definitions/active_boosts"
+      }
+    },
+    "rowFilter.active_boosts.user_id": {
+      "name": "user_id",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.active_boosts.expires_at": {
+      "name": "expires_at",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "body.territories": {
+      "name": "territories",
+      "description": "territories",
+      "required": false,
+      "in": "body",
+      "schema": {
+        "$ref": "#/definitions/territories"
+      }
+    },
+    "rowFilter.territories.id": {
+      "name": "id",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.territories.name": {
+      "name": "name",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.territories.controlling_faction": {
+      "name": "controlling_faction",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.territories.controlling_user_id": {
+      "name": "controlling_user_id",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.territories.total_influence_points": {
+      "name": "total_influence_points",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "body.profiles": {
+      "name": "profiles",
+      "description": "profiles",
+      "required": false,
+      "in": "body",
+      "schema": {
+        "$ref": "#/definitions/profiles"
+      }
+    },
+    "rowFilter.profiles.id": {
+      "name": "id",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.profiles.username": {
+      "name": "username",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.profiles.avatar_url": {
+      "name": "avatar_url",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.profiles.level": {
+      "name": "level",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.profiles.xp": {
+      "name": "xp",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.profiles.gold": {
+      "name": "gold",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.profiles.faction": {
+      "name": "faction",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.profiles.strava_access_token": {
+      "name": "strava_access_token",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.profiles.strava_refresh_token": {
+      "name": "strava_refresh_token",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.profiles.strava_athlete_id": {
+      "name": "strava_athlete_id",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.profiles.strava_expires_at": {
+      "name": "strava_expires_at",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.profiles.created_at": {
+      "name": "created_at",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.profiles.city": {
+      "name": "city",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.profiles.age": {
+      "name": "age",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "body.territory_influence": {
+      "name": "territory_influence",
+      "description": "territory_influence",
+      "required": false,
+      "in": "body",
+      "schema": {
+        "$ref": "#/definitions/territory_influence"
+      }
+    },
+    "rowFilter.territory_influence.user_id": {
+      "name": "user_id",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.territory_influence.territory_id": {
+      "name": "territory_id",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    },
+    "rowFilter.territory_influence.influence_points": {
+      "name": "influence_points",
+      "required": false,
+      "in": "query",
+      "type": "string"
+    }
+  },
+  "externalDocs": {
+    "description": "PostgREST Documentation",
+    "url": "https://postgrest.org/en/v14/references/api.html"
+  }
+}

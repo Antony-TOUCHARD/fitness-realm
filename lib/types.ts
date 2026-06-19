@@ -220,6 +220,8 @@ export type PlannedWorkout = {
   actualDuration?: number | null
   actualPace?: string | null
   coachFeedback?: string | null
+  elevationGain?: number | null
+  avgHeartrate?: number | null
   xpReward: number
   goldReward: number
 }

@@ -1304,6 +1304,8 @@ export default function ProfilePage() {
             actualDuration: null,
             actualPace: null,
             coachFeedback: null,
+            elevationGain: null,
+            avgHeartrate: null,
           };
         }
         return w;
@@ -1396,22 +1398,29 @@ export default function ProfilePage() {
     const actualPaceSeconds = actualDuration / actualDistance;
     const formattedActualPace = formatSecondsToPace(actualPaceSeconds, coachingProgram.sport);
 
-    // 3. Perform comparison & classification
+    // 3. Perform comparison & classification (incorporating elevation gain / Grade Adjusted Pace)
+    const elevationGain = loggedWorkout.elevation_gain || 0;
+    
+    // Grade Adjusted Distance (GAP equivalent distance)
+    // 1m of climb is worth 10m of flat running/walking/cycling effort
+    const adjustedDistance = actualDistance + (elevationGain / 100);
+    const gradeAdjustedPaceSeconds = actualDuration / adjustedDistance;
+
     const distanceRatio = actualDistance / targetDistVal;
     let classification: 'too_hard' | 'too_easy' | 'perfect' = 'perfect';
 
     if (coachingProgram.sport === "Run") {
-      // Too Hard: distance < 80% or pace > 1 min/km slower (actualPaceSeconds > targetPaceSeconds + 60)
-      if (distanceRatio < 0.8 || actualPaceSeconds > targetPaceSeconds + 60) {
+      // Too Hard: distance < 80% or pace > 1 min/km slower
+      if (distanceRatio < 0.8 || gradeAdjustedPaceSeconds > targetPaceSeconds + 60) {
         classification = 'too_hard';
       }
-      // Too Easy: distance > 120% or pace < 45s/km faster (actualPaceSeconds < targetPaceSeconds - 45)
-      else if (distanceRatio > 1.2 || actualPaceSeconds < targetPaceSeconds - 45) {
+      // Too Easy: distance > 120% or pace < 45s/km faster
+      else if (distanceRatio > 1.2 || gradeAdjustedPaceSeconds < targetPaceSeconds - 45) {
         classification = 'too_easy';
       }
     } else if (coachingProgram.sport === "Ride") {
       const targetSpeed = 3600 / targetPaceSeconds;
-      const actualSpeed = 3600 / actualPaceSeconds;
+      const actualSpeed = 3600 / gradeAdjustedPaceSeconds; // effort-adjusted speed
       // Too Hard: distance < 80% or speed > 5 km/h slower
       if (distanceRatio < 0.8 || actualSpeed < targetSpeed - 5) {
         classification = 'too_hard';
@@ -1423,7 +1432,7 @@ export default function ProfilePage() {
     } else {
       // Walk
       const targetSpeed = 3600 / targetPaceSeconds;
-      const actualSpeed = 3600 / actualPaceSeconds;
+      const actualSpeed = 3600 / gradeAdjustedPaceSeconds; // effort-adjusted speed
       // Too Hard: distance < 80% or speed > 1 km/h slower
       if (distanceRatio < 0.8 || actualSpeed < targetSpeed - 1) {
         classification = 'too_hard';
@@ -1434,25 +1443,39 @@ export default function ProfilePage() {
       }
     }
 
-    // 4. Compute accuracy
+    // 4. Compute accuracy (using effort-adjusted pace accuracy)
     const distanceAccuracy = Math.min(actualDistance / targetDistVal, targetDistVal / actualDistance);
-    const paceAccuracyRatio = Math.min(actualPaceSeconds / targetPaceSeconds, targetPaceSeconds / actualPaceSeconds);
+    const paceAccuracyRatio = Math.min(gradeAdjustedPaceSeconds / targetPaceSeconds, targetPaceSeconds / gradeAdjustedPaceSeconds);
     const computedPaceAccuracy = Math.max(50, Math.min(100, Math.round(((distanceAccuracy + paceAccuracyRatio) / 2) * 100)));
 
-    // 5. Generate Coach Feedback
+    // 5. Generate Coach Feedback (including GAP details if elevation is present)
+    const formattedGap = formatSecondsToPace(gradeAdjustedPaceSeconds, coachingProgram.sport);
+    let elevationReport = "";
+    if (elevationGain >= 15) {
+      if (coachingProgram.sport === "Run" || coachingProgram.sport === "Walk") {
+        elevationReport = language === "fr"
+          ? ` (Allure ajustée à plat : ${formattedGap} compte tenu des +${Math.round(elevationGain)}m de dénivelé)`
+          : ` (Flat-adjusted pace: ${formattedGap} considering the +${Math.round(elevationGain)}m of elevation gain)`;
+      } else {
+        elevationReport = language === "fr"
+          ? ` (Vitesse ajustée à plat : ${formattedGap} compte tenu des +${Math.round(elevationGain)}m de dénivelé)`
+          : ` (Flat-adjusted speed: ${formattedGap} considering the +${Math.round(elevationGain)}m of elevation gain)`;
+      }
+    }
+
     let feedbackMessage = "";
     if (classification === "too_hard") {
       feedbackMessage = language === "fr"
-        ? "Cet entraînement était trop difficile. Ne vous inquiétez pas, j'ai adapté la suite de votre programme : les distances futures sont réduites de 10% et les allures cibles sont ralenties pour vous permettre de récupérer et de progresser à votre rythme."
-        : "This workout was too hard. No worries, I have adjusted the rest of your program: future distances are reduced by 10% and target paces/speeds are scaled down to help you recover and progress at your own pace.";
+        ? `Cet entraînement était trop difficile${elevationReport}. Ne vous inquiétez pas, j'ai adapté la suite de votre programme : les distances futures sont réduites de 10% et les allures cibles sont ralenties pour vous permettre de récupérer et de progresser à votre rythme.`
+        : `This workout was too hard${elevationReport}. No worries, I have adjusted the rest of your program: future distances are reduced by 10% and target paces/speeds are scaled down to help you recover and progress at your own pace.`;
     } else if (classification === "too_easy") {
       feedbackMessage = language === "fr"
-        ? "Super travail ! Cet entraînement a été réalisé très facilement. J'ai ajusté votre programme pour stimuler votre progression : les distances futures sont augmentées de 10% et les allures cibles sont légèrement accélérées."
-        : "Great job! This workout felt too easy. I have adjusted your program to boost your progress: future distances are increased by 10% and target paces/speeds are slightly accelerated.";
+        ? `Super travail ! Cet entraînement a été réalisé très facilement${elevationReport}. J'ai ajusté votre programme pour stimuler votre progression : les distances futures sont augmentées de 10% et les allures cibles sont légèrement accélérées.`
+        : `Great job! This workout felt too easy${elevationReport}. I have adjusted your program to boost your progress: future distances are increased by 10% and target paces/speeds are slightly accelerated.`;
     } else {
       feedbackMessage = language === "fr"
-        ? "Excellent respect des consignes ! Votre allure et votre distance correspondent parfaitement aux cibles du programme. Continuez ainsi !"
-        : "Excellent consistency! Your pace and distance match the program targets perfectly. Keep up the great work!";
+        ? `Excellent respect des consignes ! Votre allure ajustée et votre distance correspondent très bien aux cibles du programme${elevationReport}. Continuez ainsi !`
+        : `Excellent consistency! Your adjusted pace and distance match the program targets very well${elevationReport}. Keep up the great work!`;
     }
 
     // 6. Update coaching program: adjust current and future week workouts
@@ -1473,6 +1496,8 @@ export default function ProfilePage() {
               actualDuration,
               actualPace: formattedActualPace,
               coachFeedback: feedbackMessage,
+              elevationGain: loggedWorkout.elevation_gain || 0,
+              avgHeartrate: loggedWorkout.avg_heartrate || null,
             };
           }
 
@@ -3110,37 +3135,131 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS age INTEGER;`}</pre>
                                 </div>
 
                                 {/* post-run analysis debrief report */}
-                                {w.completed && (w.actualDistance != null || w.actualPace != null) && (
-                                  <div className="mt-3 p-3 bg-emerald-950/10 border border-emerald-900/20 rounded-xl space-y-2 animate-fade-in">
-                                    <span className="block text-[9px] font-orbitron font-extrabold text-emerald-400 tracking-widest uppercase flex items-center gap-1">
-                                      <span>📊</span>
-                                      <span>{language === "fr" ? "Rapport d'Analyse (Compte-rendu)" : "Workout Analysis Report"}</span>
-                                    </span>
-                                    <div className="grid grid-cols-2 gap-3 text-[10px] font-orbitron">
-                                      <div className="space-y-0.5">
-                                        <span className="block text-slate-500 font-bold uppercase tracking-wider text-[8px]">
-                                          {language === "fr" ? "Distance :" : "Distance:"}
-                                        </span>
-                                        <span className="font-extrabold text-slate-200">
-                                          {w.actualDistance?.toFixed(2)} km <span className="text-slate-550 font-medium">({language === "fr" ? "Cible" : "Target"}: {w.targetDistance} km)</span>
-                                        </span>
+                                {w.completed && (w.actualDistance != null || w.actualPace != null) && (() => {
+                                  const logged = workouts.find((lw) => lw.id === w.associatedWorkoutId);
+                                  const elevation = logged ? logged.elevation_gain : (w.elevationGain || 0);
+                                  const durationVal = w.actualDuration || (logged ? (logged.duration || 0) : 0);
+                                  const bpmVal = w.avgHeartrate || (logged ? logged.avg_heartrate : null);
+                                  
+                                  let gapStr = "";
+                                  if (elevation >= 15 && w.actualDistance && durationVal) {
+                                    const adjDist = w.actualDistance + (elevation / 100);
+                                    const gapSec = durationVal / adjDist;
+                                    gapStr = formatSecondsToPace(gapSec, activeCoachingProgram.sport);
+                                  }
+
+                                  const formatDuration = (totalSeconds: number): string => {
+                                    const hrs = Math.floor(totalSeconds / 3600);
+                                    const mins = Math.floor((totalSeconds % 3600) / 60);
+                                    const secs = totalSeconds % 60;
+                                    if (hrs > 0) {
+                                      return `${hrs}h ${mins.toString().padStart(2, "0")}m ${secs.toString().padStart(2, "0")}s`;
+                                    }
+                                    return `${mins}:${secs.toString().padStart(2, "0")}`;
+                                  };
+
+                                  const isRunningOrWalking = activeCoachingProgram.sport === "Run" || activeCoachingProgram.sport === "Walk";
+                                  const paceLabel = isRunningOrWalking
+                                    ? (language === "fr" ? "Allure" : "Pace")
+                                    : (language === "fr" ? "Vitesse" : "Speed");
+
+                                  return (
+                                    <div className="mt-3 p-3 bg-emerald-950/15 border border-emerald-800/30 rounded-xl space-y-3 animate-fade-in shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)]">
+                                      <span className="block text-[9px] font-orbitron font-extrabold text-emerald-400 tracking-widest uppercase flex items-center gap-1.5">
+                                        <span className="animate-pulse">📊</span>
+                                        <span>{language === "fr" ? "Rapport d'Analyse (Compte-rendu)" : "Workout Analysis Report"}</span>
+                                      </span>
+                                      
+                                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[10px] font-orbitron">
+                                        {/* Column 1: Distance */}
+                                        <div className="space-y-0.5 bg-slate-950/30 border border-slate-900/60 p-2 rounded-lg">
+                                          <span className="block text-slate-500 font-bold uppercase tracking-wider text-[8px]">
+                                            Distance:
+                                          </span>
+                                          <span className="font-extrabold text-slate-200 block text-xs">
+                                            {w.actualDistance?.toFixed(2)} km
+                                          </span>
+                                          {w.targetDistance && (
+                                            <span className="block text-[8px] text-slate-500">
+                                              {language === "fr" ? "Cible :" : "Target:"} {w.targetDistance} km
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        {/* Column 2: Duration */}
+                                        <div className="space-y-0.5 bg-slate-950/30 border border-slate-900/60 p-2 rounded-lg">
+                                          <span className="block text-slate-500 font-bold uppercase tracking-wider text-[8px]">
+                                            {language === "fr" ? "Durée :" : "Duration:"}
+                                          </span>
+                                          <span className="font-extrabold text-slate-200 block text-xs">
+                                            {formatDuration(durationVal)}
+                                          </span>
+                                          {w.targetDuration && (
+                                            <span className="block text-[8px] text-slate-500">
+                                              {language === "fr" ? "Cible :" : "Target:"} {w.targetDuration} min
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        {/* Column 3: Pace/Speed + GAP */}
+                                        <div className="space-y-0.5 bg-slate-950/30 border border-slate-900/60 p-2 rounded-lg col-span-1">
+                                          <span className="block text-slate-500 font-bold uppercase tracking-wider text-[8px]">
+                                            {paceLabel} :
+                                          </span>
+                                          <span className="font-extrabold text-slate-200 block text-xs">
+                                            {w.actualPace}
+                                          </span>
+                                          {w.targetPace ? (
+                                            <span className="block text-[8px] text-slate-500">
+                                              {language === "fr" ? "Cible :" : "Target:"} {w.targetPace}
+                                            </span>
+                                          ) : (
+                                            <span className="block text-[8px] text-slate-500">-</span>
+                                          )}
+                                          {gapStr && (
+                                            <div className="mt-1 pt-1 border-t border-slate-900/60">
+                                              <span className="block text-[7px] text-cyan-500 uppercase font-black">
+                                                {language === "fr" ? "GAP (Ajustée) :" : "GAP (Adjusted):"}
+                                              </span>
+                                              <span className="text-[9px] text-cyan-400 font-black tracking-wide flex items-center gap-0.5 animate-pulse">
+                                                ⚡ {gapStr}
+                                              </span>
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        {/* Column 4: Heart Rate / BPM */}
+                                        <div className="space-y-0.5 bg-slate-950/30 border border-slate-900/60 p-2 rounded-lg">
+                                          <span className="block text-slate-500 font-bold uppercase tracking-wider text-[8px]">
+                                            {language === "fr" ? "Fréq. Cardiaque :" : "Heart Rate:"}
+                                          </span>
+                                          {bpmVal ? (
+                                            <span className="font-extrabold text-slate-200 block text-xs flex items-center gap-1">
+                                              <span className="text-pink-500">❤️</span>
+                                              <span>{Math.round(bpmVal)} bpm</span>
+                                            </span>
+                                          ) : (
+                                            <span className="text-slate-550 block text-[9px] italic">
+                                              {language === "fr" ? "Non disponible" : "Not available"}
+                                            </span>
+                                          )}
+                                          {elevation > 0 && (
+                                            <span className="block text-[8px] text-rose-400 font-medium">
+                                              ⛰️ +{Math.round(elevation)}m
+                                            </span>
+                                          )}
+                                        </div>
                                       </div>
-                                      <div className="space-y-0.5">
-                                        <span className="block text-slate-500 font-bold uppercase tracking-wider text-[8px]">
-                                          {language === "fr" ? "Allure Moyenne :" : "Avg Pace:"}
-                                        </span>
-                                        <span className="font-extrabold text-slate-200">
-                                          {w.actualPace} <span className="text-slate-550 font-medium">({language === "fr" ? "Cible" : "Target"}: {w.targetPace})</span>
-                                        </span>
-                                      </div>
+                                      
+                                      {w.coachFeedback && (
+                                        <div className="text-[10px] text-slate-400 leading-relaxed pt-2.5 border-t border-slate-900/60 font-medium flex items-start gap-1.5">
+                                          <span className="text-base leading-none select-none">💬</span>
+                                          <span className="italic">{w.coachFeedback}</span>
+                                        </div>
+                                      )}
                                     </div>
-                                    {w.coachFeedback && (
-                                      <p className="text-[10px] text-slate-450 italic leading-relaxed pt-2 border-t border-slate-900/60 font-medium">
-                                        💬 {w.coachFeedback}
-                                      </p>
-                                    )}
-                                  </div>
-                                )}
+                                  );
+                                })()}
 
                                 {/* Association Controls */}
                                 <div className="mt-3 pt-2.5 border-t border-slate-900/40 flex items-center justify-between flex-wrap gap-2">
