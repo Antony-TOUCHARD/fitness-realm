@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { Shield, Zap, Sun, Moon, Swords, Trophy, Map, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,9 +8,132 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useLanguage } from "@/components/layout/language-provider";
 import { LanguageToggle } from "@/components/layout/language-toggle";
+import { isDemoMode, demoWorkouts, demoTerritories } from "@/lib/demo-data";
 
 export default function LandingPage() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const [stats, setStats] = useState({
+    activeHeroes: 10482,
+    xpEarned: 2400000,
+    kmTraveled: 41920,
+    territoriesHeld: 512,
+  });
+
+  useEffect(() => {
+    let supabaseClient: any = null;
+    let profilesChannel: any = null;
+    let workoutsChannel: any = null;
+    let territoriesChannel: any = null;
+
+    async function fetchAndSetStats(supabase: any) {
+      try {
+        // 1. Count active heroes
+        const { count: heroesCount } = await supabase
+          .from("profiles")
+          .select("*", { count: "exact", head: true });
+
+        // 2. Sum workouts stats (distance and XP)
+        const { data: workoutsData } = await supabase
+          .from("workouts")
+          .select("distance, xp_gained");
+
+        // 3. Count conquered territories
+        const { data: territoriesData } = await supabase
+          .from("territories")
+          .select("controlling_faction");
+
+        const totalDist = workoutsData?.reduce((sum: number, w: any) => sum + Number(w.distance), 0) || 0;
+        const totalXP = workoutsData?.reduce((sum: number, w: any) => sum + Number(w.xp_gained), 0) || 0;
+        const terrsCount = territoriesData?.filter((t: any) => t.controlling_faction !== "Neutral").length || 0;
+
+        setStats({
+          activeHeroes: heroesCount || 0,
+          xpEarned: totalXP,
+          kmTraveled: Math.round(totalDist * 10) / 10,
+          territoriesHeld: terrsCount,
+        });
+      } catch (err) {
+        console.error("Error fetching stats update:", err);
+      }
+    }
+
+    async function loadStats() {
+      const isDemo = isDemoMode();
+      if (isDemo) {
+        // In demo mode, show aggregated demo data
+        const demoTotalDist = demoWorkouts.reduce((sum, w) => sum + Number(w.distance), 0);
+        const demoTotalXP = demoWorkouts.reduce((sum, w) => sum + Number(w.xp_gained), 0);
+        const demoTerrsCount = demoTerritories.filter(t => t.controlling_faction !== "Neutral").length;
+        
+        setStats({
+          activeHeroes: 5,
+          xpEarned: demoTotalXP,
+          kmTraveled: Math.round(demoTotalDist * 10) / 10,
+          territoriesHeld: demoTerrsCount,
+        });
+        return;
+      }
+
+      try {
+        const { createClient } = await import("@/lib/supabase/client");
+        const supabase = createClient();
+        supabaseClient = supabase;
+
+        // Fetch initial values
+        await fetchAndSetStats(supabase);
+
+        // Subscribe to real-time changes on profiles (active heroes count)
+        profilesChannel = supabase
+          .channel("realtime-profiles")
+          .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => {
+            fetchAndSetStats(supabase);
+          })
+          .subscribe();
+
+        // Subscribe to real-time changes on workouts (XP and distance sums)
+        workoutsChannel = supabase
+          .channel("realtime-workouts")
+          .on("postgres_changes", { event: "*", schema: "public", table: "workouts" }, () => {
+            fetchAndSetStats(supabase);
+          })
+          .subscribe();
+
+        // Subscribe to real-time changes on territories (territories held count)
+        territoriesChannel = supabase
+          .channel("realtime-territories")
+          .on("postgres_changes", { event: "*", schema: "public", table: "territories" }, () => {
+            fetchAndSetStats(supabase);
+          })
+          .subscribe();
+
+      } catch (err) {
+        console.error("Error loading landing page stats:", err);
+      }
+    }
+    loadStats();
+
+    return () => {
+      if (supabaseClient) {
+        if (profilesChannel) supabaseClient.removeChannel(profilesChannel);
+        if (workoutsChannel) supabaseClient.removeChannel(workoutsChannel);
+        if (territoriesChannel) supabaseClient.removeChannel(territoriesChannel);
+      }
+    };
+  }, []);
+
+  const formatNumber = (num: number) => {
+    return new Intl.NumberFormat(language === "fr" ? "fr-FR" : "en-US").format(num);
+  };
+
+  const formatXP = (xp: number) => {
+    if (xp >= 1000000) {
+      return `${(xp / 1000000).toFixed(1)}M`;
+    }
+    if (xp >= 1000) {
+      return `${(xp / 1000).toFixed(1)}k`;
+    }
+    return xp.toString();
+  };
 
   const factions = [
     {
@@ -116,7 +239,7 @@ export default function LandingPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 w-full max-w-4xl pt-8 border-y border-slate-900/60 py-8 px-4 bg-slate-950/10 backdrop-blur-sm rounded-2xl">
           <div>
             <span className="block font-orbitron font-black text-2xl sm:text-3xl text-slate-100 tracking-wider">
-              10,482+
+              {stats.activeHeroes}
             </span>
             <span className="block text-[10px] font-orbitron font-bold text-slate-500 tracking-wider uppercase mt-1">
               {t("activeHeroes")}
@@ -124,7 +247,7 @@ export default function LandingPage() {
           </div>
           <div>
             <span className="block font-orbitron font-black text-2xl sm:text-3xl text-violet-400 tracking-wider filter drop-shadow-[0_0_4px_rgba(139,92,246,0.2)]">
-              2.4M+
+              {formatXP(stats.xpEarned)}
             </span>
             <span className="block text-[10px] font-orbitron font-bold text-slate-500 tracking-wider uppercase mt-1">
               {t("xpEarned")}
@@ -132,7 +255,7 @@ export default function LandingPage() {
           </div>
           <div>
             <span className="block font-orbitron font-black text-2xl sm:text-3xl text-cyan-400 tracking-wider filter drop-shadow-[0_0_4px_rgba(6,182,212,0.2)]">
-              41,920
+              {formatNumber(stats.kmTraveled)}
             </span>
             <span className="block text-[10px] font-orbitron font-bold text-slate-500 tracking-wider uppercase mt-1">
               {t("kmTraveled")}
@@ -140,7 +263,7 @@ export default function LandingPage() {
           </div>
           <div>
             <span className="block font-orbitron font-black text-2xl sm:text-3xl text-amber-400 tracking-wider filter drop-shadow-[0_0_4px_rgba(245,158,11,0.2)]">
-              512+
+              {stats.territoriesHeld}
             </span>
             <span className="block text-[10px] font-orbitron font-bold text-slate-500 tracking-wider uppercase mt-1">
               {t("territoriesHeld")}
