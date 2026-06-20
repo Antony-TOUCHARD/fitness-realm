@@ -3139,7 +3139,6 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS age INTEGER;`}</pre>
                                   const logged = workouts.find((lw) => lw.id === w.associatedWorkoutId);
                                   const elevation = logged ? logged.elevation_gain : (w.elevationGain || 0);
                                   const durationVal = w.actualDuration || (logged ? (logged.duration || 0) : 0);
-                                  const bpmVal = w.avgHeartrate || (logged ? logged.avg_heartrate : null);
                                   
                                   let gapStr = "";
                                   if (elevation >= 15 && w.actualDistance && durationVal) {
@@ -3228,26 +3227,15 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS age INTEGER;`}</pre>
                                           )}
                                         </div>
 
-                                        {/* Column 4: Heart Rate / BPM */}
+                                        {/* Column 4: Elevation Gain */}
                                         <div className="space-y-0.5 bg-slate-950/30 border border-slate-900/60 p-2 rounded-lg">
                                           <span className="block text-slate-500 font-bold uppercase tracking-wider text-[8px]">
-                                            {language === "fr" ? "Fréq. Cardiaque :" : "Heart Rate:"}
+                                            {language === "fr" ? "Dénivelé :" : "Elevation Gain:"}
                                           </span>
-                                          {bpmVal ? (
-                                            <span className="font-extrabold text-slate-200 block text-xs flex items-center gap-1">
-                                              <span className="text-pink-500">❤️</span>
-                                              <span>{Math.round(bpmVal)} bpm</span>
-                                            </span>
-                                          ) : (
-                                            <span className="text-slate-550 block text-[9px] italic">
-                                              {language === "fr" ? "Non disponible" : "Not available"}
-                                            </span>
-                                          )}
-                                          {elevation > 0 && (
-                                            <span className="block text-[8px] text-rose-400 font-medium">
-                                              ⛰️ +{Math.round(elevation)}m
-                                            </span>
-                                          )}
+                                          <span className="font-extrabold text-slate-200 block text-xs flex items-center gap-1">
+                                            <span className="text-rose-450">⛰️</span>
+                                            <span>+{Math.round(elevation)}m</span>
+                                          </span>
                                         </div>
                                       </div>
                                       
