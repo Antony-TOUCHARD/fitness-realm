@@ -29,7 +29,10 @@ export function ProgressBar({
       }, 100);
       return () => clearTimeout(timer);
     } else {
-      setWidth(percentage);
+      const timer = setTimeout(() => {
+        setWidth(percentage);
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [percentage, animate]);
 

@@ -18,7 +18,7 @@ export function Sidebar() {
   const isDemo = isDemoMode();
 
   useEffect(() => {
-    let supabaseChannel: any = null;
+    let supabaseChannel: import("@supabase/supabase-js").RealtimeChannel | null = null;
 
     async function fetchProfile() {
       if (isDemo) {

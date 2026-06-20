@@ -15,23 +15,22 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguageState] = useState<Language>("fr"); // Default to French
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     const savedLang = localStorage.getItem("fitness-realm-lang") as Language;
+    let targetLang: Language = "fr";
     if (savedLang === "fr" || savedLang === "en") {
-      setLanguageState(savedLang);
+      targetLang = savedLang;
     } else {
       // Check browser language
       const browserLang = navigator.language.substring(0, 2);
       if (browserLang === "en") {
-        setLanguageState("en");
-      } else {
-        setLanguageState("fr");
+        targetLang = "en";
       }
     }
-    setMounted(false); // We set mounted to true after we check local storage to prevent mismatch
-    setMounted(true);
+    setTimeout(() => {
+      setLanguageState(targetLang);
+    }, 0);
   }, []);
 
   const setLanguage = (lang: Language) => {

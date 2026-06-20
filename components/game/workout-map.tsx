@@ -9,7 +9,8 @@ import "leaflet/dist/leaflet.css";
 function decodePolyline(encoded: string): [number, number][] {
   if (!encoded) return [];
   const points: [number, number][] = [];
-  let index = 0, len = encoded.length;
+  let index = 0;
+  const len = encoded.length;
   let lat = 0, lng = 0;
 
   while (index < len) {
@@ -64,7 +65,7 @@ export default function WorkoutMap({ polyline, coordinates }: WorkoutMapProps) {
   // Fix leaflet marker icon issue in Next.js
   useEffect(() => {
     // Delete default icon _getIconUrl to prevent loading error
-    // @ts-ignore
+    // @ts-expect-error - Leaflet internal method override
     delete L.Icon.Default.prototype._getIconUrl;
     L.Icon.Default.mergeOptions({
       iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
